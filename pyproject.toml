@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nanoharness"
+version = "0.1.0"
+description = "A lightweight Python harness engineering framework"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+openai = ["openai>=1.0"]
+anthropic = ["anthropic>=0.20"]
+litellm = ["litellm>=1.0"]
+all-providers = ["nanoharness[openai,anthropic,litellm]"]
+dev = [
+    "pytest>=7.0",
+    "nanoharness[openai]",
+]
+
+[tool.setuptools.packages.find]
+include = ["nanoharness*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

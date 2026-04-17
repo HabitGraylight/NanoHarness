@@ -1,0 +1,10 @@
+# Core
+pydantic>=2.0
+
+# LLM providers (uncomment what you need)
+openai>=1.0
+# anthropic>=0.20
+# litellm>=1.0
+
+# Development
+pytest>=7.0

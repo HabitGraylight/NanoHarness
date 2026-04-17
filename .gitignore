@@ -6,4 +6,7 @@ __pycache__/
 venv/
 dist/
 build/
+tests/
 *.egg-info/
+
+CLAUDE.md
