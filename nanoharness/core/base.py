@@ -2,7 +2,13 @@ import abc
 from enum import Enum
 from typing import Any, Dict, List, Optional, Protocol
 
-from nanoharness.core.schema import AgentMessage, LLMResponse, StepResult
+from nanoharness.core.schema import (
+    AgentMessage,
+    LLMResponse,
+    MemoryEntry,
+    PermissionLevel,
+    StepResult,
+)
 
 
 class HookStage(str, Enum):
@@ -74,4 +80,32 @@ class BaseHookManager(BaseComponent):
 
     @abc.abstractmethod
     def trigger(self, stage: str, data: Any):
+        pass
+
+
+class BasePermissionManager(BaseComponent):
+    @abc.abstractmethod
+    def check(self, tool_name: str, args: Dict) -> PermissionLevel:
+        pass
+
+    @abc.abstractmethod
+    def approve(self, tool_name: str, args: Dict) -> bool:
+        pass
+
+
+class BaseMemoryManager(BaseComponent):
+    @abc.abstractmethod
+    def store(self, key: str, content: str, **metadata) -> None:
+        pass
+
+    @abc.abstractmethod
+    def recall(self, query: str, top_k: int = 5) -> List[MemoryEntry]:
+        pass
+
+    @abc.abstractmethod
+    def get_working(self) -> Dict[str, Any]:
+        pass
+
+    @abc.abstractmethod
+    def set_working(self, data: Dict[str, Any]) -> None:
         pass

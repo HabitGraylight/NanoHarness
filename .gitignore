@@ -6,7 +6,12 @@ __pycache__/
 venv/
 dist/
 build/
-tests/
 *.egg-info/
 
+# Runtime artifacts
+run_state.json
+memory.json
+agent_state.json
+
+.claude/
 CLAUDE.md

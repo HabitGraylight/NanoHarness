@@ -15,10 +15,11 @@ dependencies = [
 openai = ["openai>=1.0"]
 anthropic = ["anthropic>=0.20"]
 litellm = ["litellm>=1.0"]
-all-providers = ["nanoharness[openai,anthropic,litellm]"]
+mcp = ["mcp>=1.0"]
+all-providers = ["nanoharness[openai,anthropic,litellm,mcp]"]
 dev = [
     "pytest>=7.0",
-    "nanoharness[openai]",
+    "nanoharness[openai,mcp]",
 ]
 
 [tool.setuptools.packages.find]

@@ -1,1 +1,1 @@
-from nanoharness.components.evaluator.evaluation import TraceEvaluator
+from nanoharness.components.evaluator.trace_evaluator import TraceEvaluator

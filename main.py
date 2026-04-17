@@ -1,19 +1,22 @@
 import os
 
 from nanoharness.components.context.simple_context import SimpleContextManager
-from nanoharness.components.evaluator.evaluation import TraceEvaluator
+from nanoharness.components.evaluator.trace_evaluator import TraceEvaluator
 from nanoharness.components.hooks.simple_hooks import SimpleHookManager
 from nanoharness.components.llm.openai_adapter import OpenAIAdapter
-from nanoharness.components.storage.json_store import JsonStateStore
-from nanoharness.components.tools.dict_registry import DictToolRegistry
-from nanoharness.core.engine import NanoEngine
+from nanoharness.components.memory.simple_memory import MemoryToolMixin
+from nanoharness.components.memory.simple_memory import SimpleMemoryManager
+from nanoharness.components.permissions.rule_permission import RulePermissionManager
+from nanoharness.components.state.json_store import JsonStateStore
+from nanoharness.components.tools.script_tools import ScriptToolRegistry
+from nanoharness.core.engine import NanoEngine  # noqa: F401
 
 
-def build_engine() -> NanoEngine:
+def build_engine(enable_mcp: bool = False) -> NanoEngine:
     """Wire up all components and return a ready-to-run NanoEngine."""
 
     # --- LLM (DeepSeek via OpenAI-compatible API) ---
-    # Swap adapter here for other providers:
+    # Swap adapter for other providers:
     #   from nanoharness.components.llm.anthropic_adapter import AnthropicAdapter
     #   from nanoharness.components.llm.litellm_adapter import LiteLLMAdapter
     #   from nanoharness.components.llm.vllm_adapter import VLLMAdapter
@@ -23,27 +26,44 @@ def build_engine() -> NanoEngine:
         base_url="https://api.deepseek.com",
     )
 
-    # --- Tools ---
-    tools = DictToolRegistry()
+    # --- Tools (shell scripts from configs/scripts/) ---
+    tools = ScriptToolRegistry("configs/scripts")
 
-    @tools.tool
-    def echo(text: str):
-        """Echo back the input text."""
-        return text
+    # --- Optionally merge MCP tools ---
+    # Set NANOHARNESS_MCP=1 or pass enable_mcp=True to load tools
+    # from MCP servers defined in configs/mcp_servers.json
+    if enable_mcp or os.environ.get("NANOHARNESS_MCP", "").lower() in ("1", "true"):
+        try:
+            from nanoharness.components.mcp import MCPToolRegistry
+            mcp_reg = MCPToolRegistry(config_path="configs/mcp_servers.json")
+            tools.merge(mcp_reg)
+            mcp_reg.close()
+        except Exception as e:
+            print(f"[MCP] Failed to load MCP tools: {e}")
 
-    @tools.tool
-    def add(a: int, b: int):
-        """Add two numbers together."""
-        return a + b
+    # --- Memory ---
+    memory = SimpleMemoryManager("memory.json")
+    MemoryToolMixin.register(memory, tools)
+
+    # --- Permissions ---
+    perms = RulePermissionManager()
+    perms.deny("git_reset")
+    perms.confirm("git_push", "git_commit", "git_revert")
+    perms.confirm("file_write", "file_edit")
+    perms.confirm("shell_exec")
 
     # --- Assemble engine ---
     return NanoEngine(
         llm_client=llm,
         tools=tools,
-        context=SimpleContextManager(system_prompt="You are a helpful assistant. Use tools when appropriate."),
+        context=SimpleContextManager(
+            system_prompt="You are a helpful assistant. Use tools when appropriate."
+        ),
         state=JsonStateStore("run_state.json"),
         hooks=SimpleHookManager(),
         evaluator=TraceEvaluator(),
+        permissions=perms,
+        memory=memory,
     )
 
 
@@ -58,6 +78,7 @@ if __name__ == "__main__":
     print(f"Steps:   {report['summary']['total_steps']}")
     for i, step in enumerate(report["trajectory"]):
         print(f"\n--- Step {i} [{step['status']}] ---")
-        print(f"  Thought: {step['thought'][:100]}...")
+        thought = step["thought"][:120] + ("..." if len(step["thought"]) > 120 else "")
+        print(f"  Thought: {thought}")
         if step["observation"]:
-            print(f"  Observation: {step['observation']}")
+            print(f"  Observation: {step['observation'][:200]}")

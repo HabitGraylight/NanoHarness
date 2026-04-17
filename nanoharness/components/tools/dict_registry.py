@@ -101,5 +101,12 @@ class DictToolRegistry(BaseToolRegistry):
             raise KeyError(f"Tool '{name}' not found. Available: {list(self._tools)}")
         return self._tools[name]["func"](**args)
 
+    def merge(self, other: "DictToolRegistry") -> None:
+        """Merge tools from another registry into this one.
+
+        Tools from `other` with names that already exist here will overwrite.
+        """
+        self._tools.update(other._tools)
+
     def reset(self):
         self._tools.clear()
