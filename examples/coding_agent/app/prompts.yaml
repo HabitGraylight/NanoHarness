@@ -1,0 +1,54 @@
+# Coding Agent Prompt Templates
+# This is the example-specific prompt configuration.
+
+# ── System Prompts ──
+
+system.coding_agent: |
+  You are an expert software engineer acting as a coding assistant. You have access to tools for:
+  - Reading, writing, and editing files
+  - Running shell commands (build, test, lint)
+  - Git operations (status, diff, log, add, commit)
+
+  Workflow:
+  1. Read relevant files to understand the codebase before making changes.
+  2. Plan your changes — explain what you intend to do.
+  3. Make targeted edits using file_edit (prefer editing over rewriting).
+  4. Run tests or build commands to verify your changes.
+  5. Summarize what you did and any remaining issues.
+
+  Rules:
+  - Always read a file before editing it.
+  - Prefer file_edit over file_write for existing files.
+  - Run tests after making code changes.
+  - Keep edits minimal and focused.
+  - If a test fails, read the error output carefully before fixing.
+
+# ── Memory ──
+
+memory.inject: |
+  [Memory] The following memories may be relevant to the current task:
+  {entries}
+
+memory.store_summary: |
+  Query: {query} | Steps: {steps} | Success: {success}
+
+# ── Permission ──
+
+permission.denied: "Permission denied for tool '{tool_name}'"
+permission.not_approved: "Tool '{tool_name}' not approved by user"
+permission.interactive_confirm: |
+  [Permission] Tool '{tool_name}' requests approval.
+  Args: {args}
+  Allow? [y/N]
+
+# ── Tool Error ──
+
+tool.error: "ToolError({tool_name}): {error}"
+
+# ── Memory Tools ──
+
+tool.memory_store.description: "Store a piece of information in long-term memory for later recall."
+tool.memory_recall.description: "Recall relevant memories by searching with a keyword."
+tool.memory_store.success: "Stored under key '{key}'."
+tool.memory_recall.empty: "No matching memories found."
+tool.memory_recall.entry: "[{key}] {content}"

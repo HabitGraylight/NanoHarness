@@ -1,0 +1,39 @@
+# NanoHarness Prompt Templates
+# All prompt strings used across the framework are defined here.
+# Access via PromptManager: pm.render("memory.inject", entries=mem_text)
+
+# ── System Prompts ──
+
+system.default: |
+  You are a helpful AI assistant. Use the available tools when appropriate to accomplish the user's request.
+
+system.harness: |
+  You are a harness agent. Execute tasks step by step using the available tools.
+  Think carefully before each action. When the task is complete, respond without calling any tools.
+
+# ── Memory ──
+
+memory.inject: |
+  [Memory] The following memories may be relevant to the current task:
+  {entries}
+
+memory.store_summary: |
+  Query: {query} | Steps: {steps} | Success: {success}
+
+# ── Permission ──
+
+permission.denied: "Permission denied for tool '{tool_name}'"
+permission.not_approved: "Tool '{tool_name}' not approved by user"
+permission.interactive_confirm: "[Permission] Tool '{tool_name}' requests approval. Args: {args}\nAllow? [y/N] "
+
+# ── Tool Error ──
+
+tool.error: "ToolError({tool_name}): {error}"
+
+# ── Memory Tools ──
+
+tool.memory_store.description: "Store a piece of information in long-term memory for later recall."
+tool.memory_recall.description: "Recall relevant memories by searching with a keyword."
+tool.memory_store.success: "Stored under key '{key}'."
+tool.memory_recall.empty: "No matching memories found."
+tool.memory_recall.entry: "[{key}] {content}"
