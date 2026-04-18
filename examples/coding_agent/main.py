@@ -1,46 +1,80 @@
 #!/usr/bin/env python3
-"""Coding Agent — an example app built on NanoHarness.
+"""Coding Agent — a terminal-based coding assistant.
 
 Usage:
     export DEEPSEEK_API_KEY="sk-..."
     cd examples/coding_agent
     python main.py
 
-    # Or with a single task:
-    python main.py "Add a docstring to nanoharness/core/engine.py"
+    # Or with a single task (runs once, prints report, exits):
+    python main.py "Add a docstring to engine.py"
 """
 
 import sys
 import os
 
-# Ensure the example directory is on sys.path so that both
-# `nanoharness/` (vendored copy) and `app/` are importable.
+# Ensure example directory is on sys.path so that both
+# nanoharness/ (symlink) and app/ are importable.
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)
 
 from app.builder import build_coding_engine
+from app.ui import BANNER, read_input
+
+
+def run_repl(engine):
+    """Interactive REPL loop — keeps running until /quit."""
+    print(BANNER)
+
+    while True:
+        query = read_input()
+
+        if query is None:
+            print("Bye!")
+            break
+
+        if query == "":
+            continue
+
+        if query == "/clear":
+            engine.context.reset()
+            print("  Context cleared.\n")
+            continue
+
+        try:
+            engine.run(query)
+        except KeyboardInterrupt:
+            print(f"\n  Interrupted.")
+        except Exception as e:
+            print(f"\n  Error: {e}")
 
 
 def main():
-    engine = build_coding_engine()
+    try:
+        engine = build_coding_engine()
+    except KeyError:
+        print("Error: DEEPSEEK_API_KEY environment variable not set.")
+        print("  export DEEPSEEK_API_KEY=\"sk-...\"")
+        sys.exit(1)
 
     if len(sys.argv) > 1:
+        # Single-shot mode
         query = " ".join(sys.argv[1:])
+        report = engine.run(query)
+        _print_trajectory(report)
     else:
-        print("Coding Agent (type a task, or Ctrl+C to exit)")
-        print("-" * 40)
-        query = input("Task: ")
+        # Interactive REPL
+        run_repl(engine)
 
-    report = engine.run(query)
 
-    # Print full trajectory
+def _print_trajectory(report):
+    """Print full trajectory (single-shot mode)."""
     print("\n===== Trajectory =====")
     for i, step in enumerate(report["trajectory"]):
         print(f"\n--- Step {i} [{step['status']}] ---")
-        thought = step["thought"][:200]
-        print(f"  Thought: {thought}")
+        print(f"  Thought: {step['thought'][:300]}")
         if step["observation"]:
-            print(f"  Observation: {step['observation'][:300]}")
+            print(f"  Observation: {step['observation'][:500]}")
 
 
 if __name__ == "__main__":

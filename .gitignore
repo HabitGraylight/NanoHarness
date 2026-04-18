@@ -8,6 +8,8 @@ dist/
 build/
 *.egg-info/
 
+examples/coding_agent/sandbox/
+
 # Runtime artifacts
 run_state.json
 memory.json

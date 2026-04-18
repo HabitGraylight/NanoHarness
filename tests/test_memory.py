@@ -1,6 +1,6 @@
 from nanoharness.components.memory.simple_memory import SimpleMemoryManager
+from nanoharness.components.memory.tool_mixin import MemoryToolMixin
 from nanoharness.components.tools.dict_registry import DictToolRegistry
-from nanoharness.components.memory.simple_memory import MemoryToolMixin
 
 
 class TestSimpleMemoryManager:

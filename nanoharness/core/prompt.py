@@ -1,33 +1,25 @@
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict
 
 import yaml
 
 
 class PromptManager:
-    """Central registry for all prompt templates.
+    """Central registry for prompt templates.
 
-    Loads from a YAML file on first access, with lazy evaluation.
     Templates use Python str.format() for variable substitution.
 
     Usage:
-        pm = PromptManager()                       # loads configs/prompts.yaml
-        pm = PromptManager.from_file("my.yaml")    # custom file
+        pm = PromptManager.from_file("configs/prompts.yaml")
         text = pm.render("memory.inject", entries="...")
     """
 
-    _DEFAULT_PATH = Path(__file__).resolve().parent.parent.parent / "configs" / "prompts.yaml"
-
-    def __init__(self, templates: Optional[Dict[str, str]] = None):
+    def __init__(self):
         self._templates: Dict[str, str] = {}
-        if templates:
-            self._templates.update(templates)
-        # Auto-load defaults if available
-        if self._DEFAULT_PATH.exists():
-            self._load_file(self._DEFAULT_PATH)
 
     @classmethod
     def from_file(cls, path: str) -> "PromptManager":
+        """Load templates from a YAML file."""
         instance = cls()
         instance._load_file(Path(path))
         return instance

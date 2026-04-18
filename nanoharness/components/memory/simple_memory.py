@@ -4,23 +4,21 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from nanoharness.core.base import BaseMemoryManager
-from nanoharness.core.prompt import PromptManager
 from nanoharness.core.schema import MemoryEntry
 
 
 class SimpleMemoryManager(BaseMemoryManager):
     """Working memory (per-run scratchpad) + persistent memory (JSON file).
 
-    Working memory is a plain dict that lives in RAM and is cleared each run.
+    Working memory is a plain dict that lives in RAM and is cleared per-run.
     Persistent memory is a list of MemoryEntry objects serialized to JSON.
     Recall uses keyword matching on key and content fields.
     """
 
-    def __init__(self, persist_path: str = "memory.json", prompts: PromptManager = None):
+    def __init__(self, persist_path: str):
         self._working: Dict[str, Any] = {}
         self._long_term: List[MemoryEntry] = []
         self._persist_path = Path(persist_path)
-        self.prompts = prompts or PromptManager()
         self._load()
 
     # ── Persistent memory ──
@@ -41,7 +39,6 @@ class SimpleMemoryManager(BaseMemoryManager):
         for entry in self._long_term:
             if q in entry.key.lower() or q in entry.content.lower():
                 scored.append(entry)
-        # Return most recent matches
         scored.sort(key=lambda e: e.timestamp, reverse=True)
         return scored[:top_k]
 
@@ -80,36 +77,3 @@ class SimpleMemoryManager(BaseMemoryManager):
         if self._persist_path.exists():
             data = json.loads(self._persist_path.read_text(encoding="utf-8"))
             self._long_term = [MemoryEntry(**d) for d in data]
-
-
-class MemoryToolMixin:
-    """Mixin that registers memory_store / memory_recall as agent-callable tools.
-
-    Usage:
-        registry = DictToolRegistry()
-        memory = SimpleMemoryManager()
-        MemoryToolMixin.register(memory, registry)
-    """
-
-    @staticmethod
-    def register(memory: SimpleMemoryManager, tool_registry, prompts: PromptManager = None):
-        """Register memory tools onto an existing tool registry."""
-        pm = prompts or memory.prompts
-
-        def memory_store(key: str, content: str):
-            """Store a piece of information in long-term memory for later recall."""
-            memory.store(key, content)
-            return pm.render("tool.memory_store.success", key=key)
-
-        def memory_recall(query: str, top_k: int = 5):
-            """Recall relevant memories by searching with a keyword."""
-            results = memory.recall(query, top_k)
-            if not results:
-                return pm.get("tool.memory_recall.empty")
-            return "\n".join(
-                pm.render("tool.memory_recall.entry", key=e.key, content=e.content)
-                for e in results
-            )
-
-        tool_registry.tool(memory_store)
-        tool_registry.tool(memory_recall)

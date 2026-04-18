@@ -4,16 +4,22 @@ from nanoharness.components.context.simple_context import SimpleContextManager
 from nanoharness.components.evaluator.trace_evaluator import TraceEvaluator
 from nanoharness.components.hooks.simple_hooks import SimpleHookManager
 from nanoharness.components.llm.openai_adapter import OpenAIAdapter
-from nanoharness.components.memory.simple_memory import MemoryToolMixin
 from nanoharness.components.memory.simple_memory import SimpleMemoryManager
+from nanoharness.components.memory.tool_mixin import MemoryToolMixin
 from nanoharness.components.permissions.rule_permission import RulePermissionManager
 from nanoharness.components.state.json_store import JsonStateStore
 from nanoharness.components.tools.script_tools import ScriptToolRegistry
-from nanoharness.core.engine import NanoEngine  # noqa: F401
+from nanoharness.core.base import HookStage
+from nanoharness.core.engine import NanoEngine
+from nanoharness.core.prompt import PromptManager
+from nanoharness.core.schema import AgentMessage
 
 
 def build_engine(enable_mcp: bool = False) -> NanoEngine:
     """Wire up all components and return a ready-to-run NanoEngine."""
+
+    # --- Prompts ---
+    prompts = PromptManager.from_file("configs/prompts.yaml")
 
     # --- LLM (DeepSeek via OpenAI-compatible API) ---
     # Swap adapter for other providers:
@@ -34,8 +40,10 @@ def build_engine(enable_mcp: bool = False) -> NanoEngine:
     # from MCP servers defined in configs/mcp_servers.json
     if enable_mcp or os.environ.get("NANOHARNESS_MCP", "").lower() in ("1", "true"):
         try:
-            from nanoharness.components.mcp import MCPToolRegistry
-            mcp_reg = MCPToolRegistry(config_path="configs/mcp_servers.json")
+            from nanoharness.components.mcp import MCPClient, MCPToolRegistry
+            mcp_client = MCPClient()
+            mcp_client.connect_from_config("configs/mcp_servers.json")
+            mcp_reg = MCPToolRegistry(mcp_client)
             tools.merge(mcp_reg)
             mcp_reg.close()
         except Exception as e:
@@ -45,6 +53,41 @@ def build_engine(enable_mcp: bool = False) -> NanoEngine:
     memory = SimpleMemoryManager("memory.json")
     MemoryToolMixin.register(memory, tools)
 
+    # --- Memory hooks (inject before run, persist after run) ---
+    hooks = SimpleHookManager()
+
+    def on_task_start(user_query):
+        memory.clear_working()
+        related = memory.recall(user_query)
+        if related:
+            entries = "\n".join(
+                prompts.render("tool.memory_recall.entry", key=e.key, content=e.content)
+                for e in related
+            )
+            context.add_message(
+                AgentMessage(
+                    role="system",
+                    content=prompts.render("memory.inject", entries=entries),
+                )
+            )
+
+    def on_task_end(report):
+        summary = prompts.render(
+            "memory.store_summary",
+            query=report.get("trajectory", [{}])[0].get("thought", "")[:50] if report.get("trajectory") else "",
+            steps=report["summary"]["total_steps"],
+            success=report["summary"]["success"],
+        )
+        memory.store(
+            key=f"run:{id(report)}",
+            content=summary,
+            total_steps=report["summary"]["total_steps"],
+            success=report["summary"]["success"],
+        )
+
+    hooks.register(HookStage.ON_TASK_START, on_task_start)
+    hooks.register(HookStage.ON_TASK_END, on_task_end)
+
     # --- Permissions ---
     perms = RulePermissionManager()
     perms.deny("git_reset")
@@ -53,17 +96,18 @@ def build_engine(enable_mcp: bool = False) -> NanoEngine:
     perms.confirm("shell_exec")
 
     # --- Assemble engine ---
+    context = SimpleContextManager(
+        system_prompt=prompts.get("system.default")
+    )
+
     return NanoEngine(
         llm_client=llm,
         tools=tools,
-        context=SimpleContextManager(
-            system_prompt="You are a helpful assistant. Use tools when appropriate."
-        ),
+        context=context,
         state=JsonStateStore("run_state.json"),
-        hooks=SimpleHookManager(),
+        hooks=hooks,
         evaluator=TraceEvaluator(),
         permissions=perms,
-        memory=memory,
     )
 
 

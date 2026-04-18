@@ -1,0 +1,8 @@
+# Runtime artifacts
+sandbox/
+*.json
+!configs/mcp_servers.json
+
+# Python
+__pycache__/
+*.pyc

@@ -28,15 +28,10 @@ class MCPToolRegistry(DictToolRegistry):
 
     def __init__(
         self,
-        client: Optional[MCPClient] = None,
-        config_path: Optional[str] = None,
+        client: MCPClient,
     ):
         super().__init__()
-        self._client = client or MCPClient()
-        self._owned_client = client is None  # we created it, we close it
-
-        if config_path:
-            self._client.connect_from_config(config_path)
+        self._client = client
 
         self._load_tools()
 
@@ -63,8 +58,7 @@ class MCPToolRegistry(DictToolRegistry):
             }
 
     def close(self):
-        if self._owned_client:
-            self._client.close()
+        self._client.close()
 
     def __enter__(self):
         return self

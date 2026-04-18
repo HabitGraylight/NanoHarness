@@ -2,7 +2,6 @@
 
 import sys
 import os
-import pytest
 
 # Ensure example directory is on sys.path
 _HERE = os.path.dirname(os.path.abspath(__file__))

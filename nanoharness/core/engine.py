@@ -4,18 +4,27 @@ from nanoharness.core.base import (
     BaseContextManager,
     BaseEvaluator,
     BaseHookManager,
-    BaseMemoryManager,
     BasePermissionManager,
     BaseStateStore,
     BaseToolRegistry,
     HookStage,
     LLMProtocol,
 )
-from nanoharness.core.prompt import PromptManager
-from nanoharness.core.schema import AgentMessage, PermissionLevel, StepResult
+from nanoharness.core.schema import AgentMessage, StepResult
 
 
 class NanoEngine:
+    """Minimal agent loop orchestrator: Think -> Act -> Observe.
+
+    The engine is a thin coordination layer. It does NOT contain:
+    - Memory strategies (inject / persist) — wire via hooks
+    - Prompt template rendering — belongs in app layer
+    - Permission I/O (interactive confirm) — belongs in permission manager
+    - Tool error formatting — belongs in tool registry or app layer
+
+    All policy is injected through components and hooks.
+    """
+
     def __init__(
         self,
         llm_client: LLMProtocol,
@@ -24,10 +33,8 @@ class NanoEngine:
         state: BaseStateStore,
         hooks: BaseHookManager,
         evaluator: BaseEvaluator,
-        max_steps: int = 5,
+        max_steps: int = 10,
         permissions: Optional[BasePermissionManager] = None,
-        memory: Optional[BaseMemoryManager] = None,
-        prompts: Optional[PromptManager] = None,
     ):
         self.llm = llm_client
         self.tools = tools
@@ -37,26 +44,8 @@ class NanoEngine:
         self.evaluator = evaluator
         self.max_steps = max_steps
         self.permissions = permissions
-        self.memory = memory
-        self.prompts = prompts or PromptManager()
 
     def run(self, user_query: str) -> Dict:
-        # Inject relevant memories into context
-        if self.memory:
-            self.memory.clear_working()
-            related = self.memory.recall(user_query)
-            if related:
-                entries = "\n".join(
-                    self.prompts.render("tool.memory_recall.entry", key=e.key, content=e.content)
-                    for e in related
-                )
-                self.context.add_message(
-                    AgentMessage(
-                        role="system",
-                        content=self.prompts.render("memory.inject", entries=entries),
-                    )
-                )
-
         self.hooks.trigger(HookStage.ON_TASK_START, user_query)
         self.context.add_message(AgentMessage(role="user", content=user_query))
 
@@ -72,22 +61,6 @@ class NanoEngine:
 
         report = self.evaluator.get_report()
         self.hooks.trigger(HookStage.ON_TASK_END, report)
-
-        # Persist run summary to memory
-        if self.memory:
-            summary = self.prompts.render(
-                "memory.store_summary",
-                query=user_query,
-                steps=report["summary"]["total_steps"],
-                success=report["summary"]["success"],
-            )
-            self.memory.store(
-                key=f"run:{user_query[:50]}",
-                content=summary,
-                total_steps=report["summary"]["total_steps"],
-                success=report["summary"]["success"],
-            )
-
         return report
 
     def _execute_step(self, step_id: int) -> StepResult:
@@ -109,28 +82,16 @@ class NanoEngine:
 
         if response.tool_calls:
             for call in response.tool_calls:
-                # Permission check
+                # Permission gate
                 if self.permissions:
-                    level = self.permissions.check(call.name, call.arguments)
-                    if level == PermissionLevel.DENY:
+                    error = self.permissions.enforce(call.name, call.arguments)
+                    if error:
                         step_res.status = "error"
-                        step_res.observation = self.prompts.render(
-                            "permission.denied", tool_name=call.name
-                        )
+                        step_res.observation = error
                         self.context.add_message(
-                            AgentMessage(role="tool", content=step_res.observation)
+                            AgentMessage(role="tool", content=error)
                         )
                         continue
-                    if level == PermissionLevel.CONFIRM:
-                        if not self.permissions.approve(call.name, call.arguments):
-                            step_res.status = "error"
-                            step_res.observation = self.prompts.render(
-                                "permission.not_approved", tool_name=call.name
-                            )
-                            self.context.add_message(
-                                AgentMessage(role="tool", content=step_res.observation)
-                            )
-                            continue
 
                 try:
                     obs = self.tools.call(call.name, call.arguments)
@@ -138,9 +99,8 @@ class NanoEngine:
                     step_res.observation = str(obs)
                 except Exception as exc:
                     step_res.status = "error"
-                    step_res.observation = self.prompts.render(
-                        "tool.error", tool_name=call.name, error=exc
-                    )
+                    step_res.observation = f"ToolError({call.name}): {exc}"
+
                 self.context.add_message(
                     AgentMessage(role="tool", content=step_res.observation)
                 )

@@ -1,39 +1,37 @@
-# Fork Notes — examples/coding_agent/nanoharness/
+# Fork Notes — examples/coding_agent/
 
-This document tracks the relationship between the vendored `nanoharness/` in this
-example and the root `nanoharness/` in the repository.
+## Relationship to Root nanoharness
 
-## Origin
+`examples/coding_agent/nanoharness/` is a **symlink** to `../../nanoharness`.
 
-- **Source**: Root `nanoharness/` at commit `e9d83af` (2026-04-18)
-- **Copy date**: 2026-04-18
-- **Method**: Direct file copy, no modifications at time of fork
+This means:
+- Any change to the root `nanoharness/` is immediately reflected here.
+- There is **no divergence** — both point to the same code on disk.
+- Coding-agent-specific behavior lives entirely in `app/`, not in the kernel.
 
-## Divergence Log
+## Why a Symlink
 
-| Date | File(s) | Change | Back-ported? |
-|---|---|---|---|
-| — | — | No divergence yet | — |
+The kernel has been refactored to be policy-free:
+- `NanoEngine` does not depend on `PromptManager`, `MemoryManager`, or permission I/O.
+- All app-level behavior (memory injection/persistence, prompt templates, approval flow)
+  is wired in `app/builder.py` via hooks and component configuration.
 
-## Sync Rules
+This makes it safe to share the kernel — the example only needs to add its own
+app layer (`app/`) without forking or modifying the kernel.
 
-1. **Bug fixes** in root `nanoharness/` core components (`core/schema.py`, `core/engine.py`, `core/base.py`, `core/prompt.py`) should be synced here.
-2. **Coding-agent-specific changes** (prompts, tool policy, hooks) live in `app/` — these are NOT forked code and don't need syncing.
-3. **Component changes** in `components/` are evaluated case-by-case: if a change is generic, sync it; if it's coding-specific, keep it local.
+## App Layer Structure
 
-## Files expected to diverge
+```
+app/
+  builder.py       # Engine wiring (assembles kernel components + app policy)
+  prompts.yaml     # Coding-agent-specific prompt templates
+  tools.py         # Tool assembly (shell scripts + Python-native tools)
+  permissions.py   # Permission policy (deny reset, confirm push)
+  hooks.py         # Output hooks (step-by-step visibility)
+```
 
-These files are likely to accumulate coding-agent-specific behavior over time:
+## History
 
-- `nanoharness/core/engine.py` — may add coding-specific loop strategies
-- `nanoharness/components/tools/script_tools.py` — may change tool execution policy
-- `nanoharness/components/permissions/rule_permission.py` — may add richer approval UX
-
-## Files expected to stay close to root
-
-These files are unlikely to need coding-agent-specific changes:
-
-- `nanoharness/core/schema.py`
-- `nanoharness/core/base.py`
-- `nanoharness/core/prompt.py`
-- `nanoharness/utils/`
+- **2026-04-18**: Initial setup with vendored copy of nanoharness
+- **2026-04-18**: Replaced vendored copy with symlink after kernel refactoring
+  removed all app-layer coupling from the engine

@@ -79,11 +79,16 @@ class ScriptToolRegistry(DictToolRegistry):
     Usage:
         reg = ScriptToolRegistry("configs/scripts")
         reg.call("git_status", {"repo_path": "/my/repo"})
+
+    Args:
+        scripts_dir: Path to directory containing .sh tool scripts.
+        timeout: Execution timeout per script call in seconds.
     """
 
-    def __init__(self, scripts_dir: str = "configs/scripts"):
+    def __init__(self, scripts_dir: str, timeout: int = 60):
         super().__init__()
         self._scripts_dir = Path(scripts_dir)
+        self._timeout = timeout
         if self._scripts_dir.is_dir():
             self._load_scripts()
 
@@ -105,7 +110,7 @@ class ScriptToolRegistry(DictToolRegistry):
                 required.append(p["name"])
 
         self._tools[name] = {
-            "func": lambda _path=script_path, **kwargs: self._exec(_path, kwargs),
+            "func": lambda _path=script_path, _timeout=self._timeout, **kwargs: self._exec(_path, kwargs, _timeout),
             "schema": {
                 "type": "function",
                 "function": {
@@ -122,7 +127,7 @@ class ScriptToolRegistry(DictToolRegistry):
         }
 
     @staticmethod
-    def _exec(script_path: Path, args: Dict[str, Any]) -> str:
+    def _exec(script_path: Path, args: Dict[str, Any], timeout: int = 60) -> str:
         env = os.environ.copy()
         for k, v in args.items():
             if isinstance(v, bool):
@@ -134,7 +139,7 @@ class ScriptToolRegistry(DictToolRegistry):
             ["bash", str(script_path)],
             capture_output=True,
             text=True,
-            timeout=60,
+            timeout=timeout,
             env=env,
         )
         if result.returncode != 0:

@@ -15,12 +15,13 @@ class MCPClient:
     All public methods are synchronous — safe to call from NanoEngine.
     """
 
-    def __init__(self):
+    def __init__(self, timeout: int = 60):
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
         self._thread.start()
         self._sessions: Dict[str, Dict[str, Any]] = {}
         self._tool_to_server: Dict[str, str] = {}
+        self._timeout = timeout
 
     # ── Connection ──
 
@@ -34,7 +35,7 @@ class MCPClient:
         params = StdioServerParameters(command=command, args=args or [], env=env)
         self._run(self._connect_session(name, params))
 
-    def connect_from_config(self, config_path: str = "configs/mcp_servers.json"):
+    def connect_from_config(self, config_path: str):
         path = Path(config_path)
         if not path.exists():
             return
@@ -126,4 +127,4 @@ class MCPClient:
 
     def _run(self, coro):
         future = asyncio.run_coroutine_threadsafe(coro, self._loop)
-        return future.result(timeout=60)
+        return future.result(timeout=self._timeout)

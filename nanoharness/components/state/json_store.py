@@ -8,7 +8,7 @@ from nanoharness.core.base import BaseStateStore
 class JsonStateStore(BaseStateStore):
     """Minimal persistence layer using a local JSON file."""
 
-    def __init__(self, storage_path: str = "agent_state.json"):
+    def __init__(self, storage_path: str):
         self._path = Path(storage_path)
 
     def save_state(self, state: Dict[str, Any]):

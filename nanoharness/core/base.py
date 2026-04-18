@@ -89,7 +89,12 @@ class BasePermissionManager(BaseComponent):
         pass
 
     @abc.abstractmethod
-    def approve(self, tool_name: str, args: Dict) -> bool:
+    def enforce(self, tool_name: str, args: Dict) -> Optional[str]:
+        """Check permissions and handle approval.
+
+        Returns None if the tool call is allowed, or an error message
+        string if the call should be blocked.
+        """
         pass
 
 
