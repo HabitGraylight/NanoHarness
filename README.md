@@ -11,6 +11,8 @@
   <span style="color:gray">Think → Act → Observe — with pluggable everything.</span>
 </p>
 
+English | [中文](README_CN.md)
+
 ---
 
 ## Table of Contents
