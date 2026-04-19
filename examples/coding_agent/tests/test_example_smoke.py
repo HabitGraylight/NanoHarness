@@ -18,7 +18,7 @@ from nanoharness.components.hooks.simple_hooks import SimpleHookManager
 from nanoharness.components.state.json_store import JsonStateStore
 from nanoharness.core.engine import NanoEngine
 from nanoharness.core.prompt import PromptManager
-from nanoharness.core.schema import LLMResponse, PermissionLevel
+from nanoharness.core.schema import AgentMessage, LLMResponse, PermissionLevel
 
 
 class MockLLMClient:
@@ -170,6 +170,109 @@ def test_ui_banner():
     from app.ui import BANNER, HELP_TEXT
     assert "Coding Agent" in BANNER
     assert "/quit" in HELP_TEXT
+
+
+# ── Context management tests ──
+
+
+def test_context_compress_truncates_old_tool_obs(tmp_path):
+    """compress_completed_rounds truncates old tool observations, keeps recent."""
+    from app.context import compress_completed_rounds
+
+    ctx = SimpleContextManager(system_prompt="System.")
+    # Round 1
+    ctx.add_message(AgentMessage(role="user", content="Task 1"))
+    ctx.add_message(AgentMessage(role="assistant", content="Thinking..."))
+    ctx.add_message(AgentMessage(role="tool", content="A" * 2000))  # long obs
+    ctx.add_message(AgentMessage(role="assistant", content="Done."))
+    # Round 2 (current)
+    ctx.add_message(AgentMessage(role="user", content="Task 2"))
+    ctx.add_message(AgentMessage(role="assistant", content="Thinking..."))
+    ctx.add_message(AgentMessage(role="tool", content="B" * 2000))  # recent obs
+
+    compress_completed_rounds(ctx, max_obs_chars=300)
+
+    msgs = ctx._messages
+    # System preserved
+    assert msgs[0].role == "system"
+    # Old tool obs truncated
+    old_tool = msgs[3]
+    assert old_tool.role == "tool"
+    assert len(old_tool.content) < 400
+    assert "truncated" in old_tool.content
+    # Recent tool obs preserved
+    recent_tool = msgs[7]
+    assert recent_tool.role == "tool"
+    assert len(recent_tool.content) == 2000  # untouched
+    # Assistant messages preserved
+    assert msgs[2].content == "Thinking..."
+    assert msgs[4].content == "Done."
+
+
+def test_context_compress_keeps_short_obs(tmp_path):
+    """Short tool observations are kept as-is."""
+    from app.context import compress_completed_rounds
+
+    ctx = SimpleContextManager()
+    ctx.add_message(AgentMessage(role="user", content="Task"))
+    ctx.add_message(AgentMessage(role="tool", content="Short output"))
+
+    compress_completed_rounds(ctx, max_obs_chars=500)
+
+    assert ctx._messages[1].content == "Short output"
+
+
+def test_trim_to_token_limit(tmp_path):
+    """trim_to_token_limit drops old messages when context is too long."""
+    from app.context import trim_to_token_limit
+
+    ctx = SimpleContextManager(system_prompt="System prompt here.")
+    ctx.add_message(AgentMessage(role="user", content="Task 1"))
+    ctx.add_message(AgentMessage(role="assistant", content="Thinking"))
+    ctx.add_message(AgentMessage(role="user", content="Task 2"))
+    ctx.add_message(AgentMessage(role="assistant", content="Done"))
+
+    # Set a very low limit to force trimming
+    trim_to_token_limit(ctx, token_limit=5)
+
+    msgs = ctx._messages
+    # System should survive
+    assert msgs[0].role == "system"
+    # Old messages should be dropped
+    assert len(msgs) < 5
+
+
+def test_goal_verify_achieved():
+    """verify_goal returns True for ACHIEVED response."""
+    from app.context import verify_goal
+
+    class VerifyLLM:
+        def chat(self, messages, tools=None):
+            return LLMResponse(content="ACHIEVED: The file was successfully edited.", tool_calls=None)
+
+    achieved, explanation = verify_goal(
+        VerifyLLM(),
+        "Add a docstring",
+        {"trajectory": [{"status": "terminated", "thought": "Done", "observation": None, "action": None}]}
+    )
+    assert achieved is True
+    assert "file was successfully" in explanation
+
+
+def test_goal_verify_not_achieved():
+    """verify_goal returns False for NOT_ACHIEVED response."""
+    from app.context import verify_goal
+
+    class VerifyLLM:
+        def chat(self, messages, tools=None):
+            return LLMResponse(content="NOT_ACHIEVED: The file was not found.", tool_calls=None)
+
+    achieved, explanation = verify_goal(
+        VerifyLLM(),
+        "Fix the bug",
+        {"trajectory": [{"status": "error", "thought": "Failed", "observation": "Error", "action": None}]}
+    )
+    assert achieved is False
 
 
 # ── Helpers ──
