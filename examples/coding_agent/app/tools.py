@@ -1,71 +1,35 @@
 """Coding agent tool assembly.
 
-Combines script-based tools from configs/scripts/ with Python-native
-tools for code search and file operations that are better handled
-in-process than via shell environment variables.
+Builds a DispatchRegistry with path sandboxing and bash-wrapped execution.
+Adding a tool = adding a handler + adding a schema.
 """
 
-import subprocess
-from pathlib import Path
+import os
 
-from nanoharness.components.tools.dict_registry import DictToolRegistry
-from nanoharness.components.tools.script_tools import ScriptToolRegistry
+from app.dispatch import DispatchRegistry
+from app.handlers import register_script_tools, register_python_tools
 
 
-def build_tools(scripts_dir: str = "configs/scripts") -> ScriptToolRegistry:
+def build_tools(
+    scripts_dir: str = "configs/scripts",
+    workspace_root: str | None = None,
+) -> DispatchRegistry:
     """Build the coding agent tool registry.
 
-    Returns a merged registry containing:
-    - All shell scripts from scripts_dir (git, file, sys ops)
-    - Python-native search tool (better than shell for large codebases)
+    Args:
+        scripts_dir: Path to .sh script directory.
+        workspace_root: Root directory for path sandboxing.
+            Defaults to the grandparent of this file (the coding_agent/ dir).
+
+    Returns:
+        DispatchRegistry implementing BaseToolRegistry.
     """
-    tools = ScriptToolRegistry(scripts_dir)
+    if workspace_root is None:
+        workspace_root = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..")
+        )
 
-    py_tools = _build_python_tools()
-    tools.merge(py_tools)
-
-    return tools
-
-
-def _build_python_tools() -> DictToolRegistry:
-    """Register Python-native tools that supplement shell scripts."""
-    registry = DictToolRegistry()
-
-    @registry.tool
-    def search_code(pattern: str, path: str = ".", file_glob: str = "*.py") -> str:
-        """Search for a regex pattern in source files (like grep).
-
-        Use this to find where functions, classes, or variables are defined
-        or referenced across the codebase.
-        """
-        try:
-            result = subprocess.run(
-                ["grep", "-rn", "-E", "--include", file_glob, pattern, path],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            output = result.stdout.strip()
-            if not output:
-                return "No matches found."
-            lines = output.splitlines()
-            if len(lines) > 50:
-                return "\n".join(lines[:50]) + f"\n... and {len(lines) - 50} more matches"
-            return output
-        except subprocess.TimeoutExpired:
-            return "Search timed out after 30s."
-
-    @registry.tool
-    def list_files(pattern: str = "**/*.py", path: str = ".") -> str:
-        """List files matching a glob pattern.
-
-        Use this to understand the project structure before making changes.
-        """
-        files = sorted(str(p) for p in Path(path).glob(pattern) if p.is_file())
-        if not files:
-            return "No files found."
-        if len(files) > 80:
-            return "\n".join(files[:80]) + f"\n... and {len(files) - 80} more files"
-        return "\n".join(files)
-
+    registry = DispatchRegistry(workspace_root=workspace_root)
+    register_script_tools(registry, scripts_dir)
+    register_python_tools(registry)
     return registry

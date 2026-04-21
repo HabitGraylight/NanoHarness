@@ -10,7 +10,7 @@ from nanoharness.components.context.simple_context import SimpleContextManager
 from nanoharness.components.evaluator.trace_evaluator import TraceEvaluator
 from nanoharness.components.llm.openai_adapter import OpenAIAdapter
 from nanoharness.components.memory.simple_memory import SimpleMemoryManager
-from nanoharness.components.memory.tool_mixin import MemoryToolMixin
+from app.handlers import register_memory_tools
 from nanoharness.components.state.json_store import JsonStateStore
 from nanoharness.core.base import HookStage
 from nanoharness.core.engine import NanoEngine
@@ -48,12 +48,13 @@ def build_coding_engine(
     )
 
     # --- Tools ---
-    scripts_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "configs", "scripts")
-    tools = build_tools(scripts_dir=scripts_dir)
+    workspace_root = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+    scripts_dir = os.path.join(workspace_root, "configs", "scripts")
+    tools = build_tools(scripts_dir=scripts_dir, workspace_root=workspace_root)
 
     # --- Memory ---
     memory = SimpleMemoryManager(persist_path=os.path.join(SANDBOX, "memory.json"))
-    MemoryToolMixin.register(memory, tools)
+    register_memory_tools(registry=tools, memory=memory)
 
     # --- Hooks ---
     hooks = build_hooks()

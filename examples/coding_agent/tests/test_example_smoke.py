@@ -36,10 +36,13 @@ class MockLLMClient:
 
 def test_tools_load():
     """All shell + Python tools register successfully."""
+    from app.dispatch import DispatchRegistry
     from app.tools import build_tools
 
+    workspace = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     scripts_dir = os.path.join(os.path.dirname(__file__), "..", "configs", "scripts")
-    tools = build_tools(scripts_dir=scripts_dir)
+    tools = build_tools(scripts_dir=scripts_dir, workspace_root=workspace)
+    assert isinstance(tools, DispatchRegistry)
     schemas = tools.get_tool_schemas()
     assert len(schemas) >= 20
     names = [s["function"]["name"] for s in schemas]
@@ -98,7 +101,7 @@ def test_engine_runs_with_mock_llm(tmp_path):
 
     engine = NanoEngine(
         llm_client=llm,
-        tools=_build_test_tools(),
+        tools=_build_test_tools(tmp_path),
         context=SimpleContextManager(system_prompt="Test."),
         state=JsonStateStore(str(tmp_path / "state.json")),
         hooks=SimpleHookManager(),
@@ -116,6 +119,9 @@ def test_engine_with_tool_call(tmp_path):
     """Engine dispatches a tool call and returns observation."""
     from nanoharness.core.schema import ToolCall
 
+    # Create a test file so list_files finds something
+    (tmp_path / "hello.py").write_text("pass")
+
     call_count = 0
 
     class ToolThenDone:
@@ -131,7 +137,7 @@ def test_engine_with_tool_call(tmp_path):
 
     engine = NanoEngine(
         llm_client=ToolThenDone(),
-        tools=_build_test_tools(),
+        tools=_build_test_tools(tmp_path),
         context=SimpleContextManager(system_prompt="Test"),
         state=JsonStateStore(str(tmp_path / "state.json")),
         hooks=SimpleHookManager(),
@@ -278,10 +284,13 @@ def test_goal_verify_not_achieved():
 # ── Helpers ──
 
 
-def _build_test_tools():
+def _build_test_tools(tmp_path=None):
     from app.tools import build_tools
     scripts_dir = os.path.join(os.path.dirname(__file__), "..", "configs", "scripts")
-    return build_tools(scripts_dir=scripts_dir)
+    workspace = str(tmp_path) if tmp_path else os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..")
+    )
+    return build_tools(scripts_dir=scripts_dir, workspace_root=workspace)
 
 
 def _build_test_perms():
