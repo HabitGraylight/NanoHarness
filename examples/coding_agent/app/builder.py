@@ -19,6 +19,7 @@ from nanoharness.core.schema import AgentMessage
 
 from app.hooks import build_hooks
 from app.permissions import build_permissions
+from app.subagent import register_task_tool
 from app.tools import build_tools
 
 # Runtime artifacts go here
@@ -55,6 +56,9 @@ def build_coding_engine(
     # --- Memory ---
     memory = SimpleMemoryManager(persist_path=os.path.join(SANDBOX, "memory.json"))
     register_memory_tools(registry=tools, memory=memory)
+
+    # --- Subagent ---
+    register_task_tool(registry=tools, llm_client=llm)
 
     # --- Hooks ---
     hooks = build_hooks()
