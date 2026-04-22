@@ -240,6 +240,124 @@ class TestRunSubagent:
         assert result  # non-empty summary
 
 
+# ── Fork tests ──
+
+
+class TestFork:
+    def test_fork_inherits_parent_messages(self, tmp_path):
+        """Fork mode: subagent sees parent context, not blank slate."""
+        parent_messages = [
+            {"role": "system", "content": "You are a coding assistant."},
+            {"role": "user", "content": "We discussed using pytest for testing."},
+            {"role": "assistant", "content": "Great, pytest it is."},
+        ]
+
+        class SeesContext:
+            """LLM that verifies it can see the parent messages."""
+            def chat(self, messages, tools=None):
+                # Check that parent context is present
+                has_parent_msg = any(
+                    "discussed using pytest" in (m.get("content") or "")
+                    for m in messages
+                )
+                if has_parent_msg:
+                    return LLMResponse(content="Yes, I see we agreed on pytest.", tool_calls=None)
+                return LLMResponse(content="I have no context.", tool_calls=None)
+
+        reg = _make_registry(tmp_path)
+        ctx = build_subagent_context(reg)
+        result = run_subagent("What did we agree on?", SeesContext(), ctx, fork_from=parent_messages)
+        assert "pytest" in result
+
+    def test_fork_does_not_mutate_parent(self, tmp_path):
+        """Fork makes a copy — subagent messages don't leak back."""
+        parent_messages = [
+            {"role": "system", "content": "Parent system."},
+            {"role": "user", "content": "Parent question."},
+        ]
+        original_len = len(parent_messages)
+
+        reg = _make_registry(tmp_path)
+        ctx = build_subagent_context(reg)
+        run_subagent("Subtask", ImmediateAnswer(), ctx, fork_from=parent_messages)
+
+        # Parent list unchanged
+        assert len(parent_messages) == original_len
+        # Subagent has its own grown list
+        assert len(ctx.messages) > original_len
+
+    def test_blank_vs_fork_messages_differ(self, tmp_path):
+        """Blank mode starts fresh; fork mode inherits context."""
+        parent_messages = [
+            {"role": "system", "content": "Parent context here."},
+        ]
+
+        reg = _make_registry(tmp_path)
+
+        # Blank
+        ctx_blank = build_subagent_context(reg)
+        run_subagent("Task", ImmediateAnswer(), ctx_blank)
+        has_parent = any("Parent context" in (m.get("content") or "") for m in ctx_blank.messages)
+        assert not has_parent
+
+        # Fork
+        ctx_fork = build_subagent_context(reg)
+        run_subagent("Task", ImmediateAnswer(), ctx_fork, fork_from=parent_messages)
+        has_parent = any("Parent context" in (m.get("content") or "") for m in ctx_fork.messages)
+        assert has_parent
+
+    def test_fork_system_addon_present(self, tmp_path):
+        """Fork mode appends FORK_SYSTEM_ADDON so subagent knows its role."""
+        parent_messages = [{"role": "system", "content": "Original."}]
+
+        reg = _make_registry(tmp_path)
+        ctx = build_subagent_context(reg)
+        run_subagent("Do something", ImmediateAnswer(), ctx, fork_from=parent_messages)
+
+        # Should have the fork addon system message
+        system_msgs = [m for m in ctx.messages if m["role"] == "system"]
+        assert any("Subtask" in m["content"] for m in system_msgs)
+
+    def test_task_tool_fork_false_by_default(self, tmp_path):
+        """task tool with fork=false (default) starts blank."""
+        reg = _make_registry(tmp_path)
+        from nanoharness.components.context.simple_context import SimpleContextManager
+        parent_ctx = SimpleContextManager(system_prompt="Parent says hello.")
+
+        class SeesNoParent:
+            def chat(self, messages, tools=None):
+                if any("Parent says hello" in (m.get("content") or "") for m in messages):
+                    return LLMResponse(content="Saw parent", tool_calls=None)
+                return LLMResponse(content="Blank slate", tool_calls=None)
+
+        register_task_tool(registry=reg, llm_client=SeesNoParent(), parent_context=parent_ctx)
+        result = reg.call("task", {"description": "Check context"})
+        assert "Blank slate" in result
+
+    def test_task_tool_fork_true_gets_parent_context(self, tmp_path):
+        """task tool with fork=true inherits parent context."""
+        reg = _make_registry(tmp_path)
+        from nanoharness.components.context.simple_context import SimpleContextManager
+        parent_ctx = SimpleContextManager(system_prompt="We are building a REST API.")
+
+        class SeesParent:
+            def chat(self, messages, tools=None):
+                if any("REST API" in (m.get("content") or "") for m in messages):
+                    return LLMResponse(content="I see the REST API plan.", tool_calls=None)
+                return LLMResponse(content="No parent context.", tool_calls=None)
+
+        register_task_tool(registry=reg, llm_client=SeesParent(), parent_context=parent_ctx)
+        result = reg.call("task", {"description": "Summarize the plan", "fork": True})
+        assert "REST API" in result
+
+    def test_task_tool_fork_without_parent_context_fails(self, tmp_path):
+        """Fork=true but no parent_context passed → error."""
+        reg = _make_registry(tmp_path)
+        register_task_tool(registry=reg, llm_client=ImmediateAnswer())
+        with pytest.raises(RuntimeError, match="Fork requires parent context"):
+            reg.call("task", {"description": "Test", "fork": True})
+
+
 # ── Task tool (integration with dispatch registry) ──
 
 

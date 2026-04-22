@@ -25,6 +25,13 @@ SUBAGENT_SYSTEM_PROMPT = (
     "You are in read-only mode — do not modify any files."
 )
 
+# Appended when forking from parent context (not a full replacement)
+FORK_SYSTEM_ADDON = (
+    "[Subtask] You are now handling a focused subtask based on the conversation above.\n"
+    "Complete it efficiently and return a concise summary.\n"
+    "You are in read-only mode — do not modify any files."
+)
+
 # Tools the subagent is allowed to use (read-only subset)
 SUBAGENT_TOOL_WHITELIST = frozenset({
     "file_read", "file_list", "file_find",
@@ -73,18 +80,33 @@ def run_subagent(
     prompt: str,
     llm_client,
     ctx: SubagentContext,
+    fork_from: List[Dict[str, Any]] | None = None,
 ) -> str:
     """Run a subagent with its own isolated context.
+
+    Args:
+        prompt:     The subtask description.
+        llm_client: LLM adapter to use.
+        ctx:        SubagentContext with tools, handlers, max_turns.
+        fork_from:  If provided, copy these parent messages as starting context
+                    instead of a blank conversation. This is "fork" — the subagent
+                    inherits awareness of what was discussed before.
 
     Executes a Think→Act→Observe loop. Returns a summary string.
     On max turns exceeded, forces a final summary.
     On error, returns a description of the failure.
     """
-    # Fresh context for each run
-    ctx.messages = [
-        {"role": "system", "content": SUBAGENT_SYSTEM_PROMPT},
-        {"role": "user", "content": prompt},
-    ]
+    if fork_from:
+        # Fork: inherit parent context copy + subtask framing
+        ctx.messages = [msg.copy() for msg in fork_from]
+        ctx.messages.append({"role": "system", "content": FORK_SYSTEM_ADDON})
+        ctx.messages.append({"role": "user", "content": prompt})
+    else:
+        # Blank: fresh system prompt + task
+        ctx.messages = [
+            {"role": "system", "content": SUBAGENT_SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ]
 
     for turn in range(ctx.max_turns):
         # Think
@@ -126,19 +148,32 @@ def run_subagent(
 # ── Task tool (parent agent entry point) ──
 
 
-def register_task_tool(registry: DispatchRegistry, llm_client):
+def register_task_tool(registry: DispatchRegistry, llm_client, parent_context=None):
     """Register the 'task' tool on the main registry.
 
-    When the parent agent calls task(description="..."),
+    When the parent agent calls task(description="...", fork=true),
     a read-only subagent is spawned to handle it.
+
+    Args:
+        registry:        The main DispatchRegistry.
+        llm_client:      LLM adapter for the subagent to use.
+        parent_context:  The parent's BaseContextManager. Required for fork mode.
     """
     def task_handler(args: Dict) -> tool_result:
         prompt = args.get("description", "")
         if not prompt:
             return tool_result(ok=False, output="", error="No task description provided")
+
+        fork = args.get("fork", False)
+        fork_from = None
+        if fork:
+            if parent_context is None:
+                return tool_result(ok=False, output="", error="Fork requires parent context")
+            fork_from = parent_context.get_full_context()
+
         try:
             ctx = build_subagent_context(registry)
-            summary = run_subagent(prompt, llm_client, ctx)
+            summary = run_subagent(prompt, llm_client, ctx, fork_from=fork_from)
             return tool_result(ok=True, output=summary)
         except Exception as e:
             return tool_result(ok=False, output="", error=f"Subagent error: {e}")
@@ -154,7 +189,8 @@ def register_task_tool(registry: DispatchRegistry, llm_client):
                     "Delegate a focused read-only subtask to a subagent. "
                     "The subagent can read files, search code, and list directories, "
                     "but cannot modify anything. Use this to gather information "
-                    "without cluttering the main conversation."
+                    "without cluttering the main conversation. "
+                    "Set fork=true to let the subagent see the current conversation history."
                 ),
                 "parameters": {
                     "type": "object",
@@ -167,12 +203,20 @@ def register_task_tool(registry: DispatchRegistry, llm_client):
                                 "'Check if there are tests for the auth module'"
                             ),
                         },
+                        "fork": {
+                            "type": "boolean",
+                            "description": (
+                                "If true, the subagent inherits a copy of the current "
+                                "conversation. Use when the subtask depends on context "
+                                "from prior discussion. Default: false."
+                            ),
+                        },
                     },
                     "required": ["description"],
                 },
             },
         },
-        path_params=[],  # task tool has no path params
+        path_params=[],
     )
 
 

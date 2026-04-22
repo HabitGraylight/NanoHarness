@@ -57,18 +57,18 @@ def build_coding_engine(
     memory = SimpleMemoryManager(persist_path=os.path.join(SANDBOX, "memory.json"))
     register_memory_tools(registry=tools, memory=memory)
 
-    # --- Subagent ---
-    register_task_tool(registry=tools, llm_client=llm)
+    # --- Context (created before subagent so fork can reference it) ---
+    system_prompt = prompts.get("system.coding_agent")
+    context = SimpleContextManager(system_prompt=system_prompt)
+
+    # --- Subagent (needs llm + context for fork support) ---
+    register_task_tool(registry=tools, llm_client=llm, parent_context=context)
 
     # --- Hooks ---
     hooks = build_hooks()
 
     # --- Permissions ---
     perms = build_permissions()
-
-    # --- Context ---
-    system_prompt = prompts.get("system.coding_agent")
-    context = SimpleContextManager(system_prompt=system_prompt)
 
     # --- Wire memory lifecycle hooks ---
     _wire_memory_hooks(hooks, memory, prompts, context)
