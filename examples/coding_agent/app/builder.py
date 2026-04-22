@@ -19,6 +19,7 @@ from nanoharness.core.schema import AgentMessage
 
 from app.hooks import build_hooks
 from app.permissions import build_permissions
+from app.skills import SkillRegistry, register_skill_tool
 from app.subagent import register_task_tool
 from app.tools import build_tools
 
@@ -63,6 +64,11 @@ def build_coding_engine(
 
     # --- Subagent (needs llm + context for fork support) ---
     register_task_tool(registry=tools, llm_client=llm, parent_context=context)
+
+    # --- Skills ---
+    skills_dir = os.path.join(workspace_root, "skills")
+    skill_reg = SkillRegistry(skills_dir)
+    register_skill_tool(registry=tools, skill_registry=skill_reg)
 
     # --- Hooks ---
     hooks = build_hooks()
