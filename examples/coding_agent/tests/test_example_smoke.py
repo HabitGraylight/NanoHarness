@@ -57,13 +57,17 @@ def test_permissions_policy():
     from app.permissions import build_permissions
 
     perms = build_permissions()
+    # Step 1: deny rules
     assert perms.check("git_reset", {}) == PermissionLevel.DENY
     assert perms.check("git_revert", {}) == PermissionLevel.DENY
+    # Step 3: allow rules
+    assert perms.check("file_read", {}) == PermissionLevel.ALLOW
+    assert perms.check("git_status", {}) == PermissionLevel.ALLOW
+    # Step 4: ask user (not in deny or allow)
     assert perms.check("git_push", {}) == PermissionLevel.CONFIRM
     assert perms.check("shell_exec", {}) == PermissionLevel.CONFIRM
-    assert perms.check("file_read", {}) == PermissionLevel.ALLOW
-    assert perms.check("file_edit", {}) == PermissionLevel.ALLOW
-    assert perms.check("git_status", {}) == PermissionLevel.ALLOW
+    assert perms.check("file_edit", {}) == PermissionLevel.CONFIRM
+    assert perms.check("file_write", {}) == PermissionLevel.CONFIRM
 
 
 def test_permissions_enforce():
@@ -342,6 +346,120 @@ def test_goal_verify_not_achieved():
         {"trajectory": [{"status": "error", "thought": "Failed", "observation": "Error", "action": None}]}
     )
     assert achieved is False
+
+
+# ── Permission gate pipeline tests ──
+
+
+def test_gate_deny_overrides_allow():
+    """Step 1 beats step 3: deny rule takes priority over allow."""
+    from app.permissions import PermissionGate
+
+    gate = PermissionGate()
+    gate.deny("dangerous_tool")
+    gate.allow("dangerous_tool")  # also in allow list
+    assert gate.check("dangerous_tool", {}) == PermissionLevel.DENY
+
+
+def test_gate_deny_glob():
+    """Step 1: glob deny patterns work."""
+    from app.permissions import PermissionGate
+
+    gate = PermissionGate()
+    gate.deny("git_*")
+    assert gate.check("git_reset", {}) == PermissionLevel.DENY
+    assert gate.check("git_push", {}) == PermissionLevel.DENY
+
+
+def test_gate_mode_yolo():
+    """Step 2: yolo mode passes everything not denied."""
+    from app.permissions import PermissionGate, GateMode
+
+    gate = PermissionGate(mode=GateMode.YOLO)
+    gate.deny("git_reset")
+    assert gate.check("git_reset", {}) == PermissionLevel.DENY
+    assert gate.check("file_write", {}) == PermissionLevel.ALLOW
+    assert gate.check("shell_exec", {}) == PermissionLevel.ALLOW
+
+
+def test_gate_mode_auto():
+    """Step 2: auto mode denies unlisted tools."""
+    from app.permissions import PermissionGate, GateMode
+
+    gate = PermissionGate(mode=GateMode.AUTO)
+    gate.allow("file_read")
+    assert gate.check("file_read", {}) == PermissionLevel.ALLOW
+    assert gate.check("shell_exec", {}) == PermissionLevel.DENY  # not in allow
+
+
+def test_gate_mode_interactive():
+    """Step 4: interactive mode asks user for unlisted tools."""
+    from app.permissions import PermissionGate, GateMode
+
+    gate = PermissionGate(mode=GateMode.INTERACTIVE)
+    gate.allow("file_read")
+    assert gate.check("file_read", {}) == PermissionLevel.ALLOW
+    assert gate.check("shell_exec", {}) == PermissionLevel.CONFIRM  # ask user
+
+
+def test_gate_mode_switch():
+    """Mode can be changed at runtime."""
+    from app.permissions import PermissionGate, GateMode
+
+    gate = PermissionGate(mode=GateMode.INTERACTIVE)
+    gate.deny("git_reset")
+    gate.allow("file_read")
+
+    # Interactive: unknown → confirm
+    assert gate.check("shell_exec", {}) == PermissionLevel.CONFIRM
+
+    # Switch to auto: unknown → deny
+    gate.set_mode(GateMode.AUTO)
+    assert gate.check("shell_exec", {}) == PermissionLevel.DENY
+
+    # Switch to yolo: unknown → allow
+    gate.set_mode(GateMode.YOLO)
+    assert gate.check("shell_exec", {}) == PermissionLevel.ALLOW
+
+    # Deny still works in yolo
+    assert gate.check("git_reset", {}) == PermissionLevel.DENY
+
+
+def test_gate_pipeline_order():
+    """Verify the exact 4-step pipeline order."""
+    from app.permissions import PermissionGate, GateMode
+
+    gate = PermissionGate(mode=GateMode.INTERACTIVE)
+    gate.deny("danger_*")
+    gate.allow("safe_*")
+
+    # Step 1: deny matches → reject (even though it also matches allow)
+    gate.allow("danger_special")
+    assert gate.check("danger_special", {}) == PermissionLevel.DENY
+
+    # Step 3: allow matches → pass
+    assert gate.check("safe_read", {}) == PermissionLevel.ALLOW
+
+    # Step 4: no match → ask user
+    assert gate.check("unknown_tool", {}) == PermissionLevel.CONFIRM
+
+
+def test_gate_approval_callback():
+    """enforce() uses approval_callback for step 4."""
+    from app.permissions import PermissionGate
+
+    answers = {"shell_exec": True, "file_write": False}
+
+    def callback(tool_name, args):
+        return answers.get(tool_name, False)
+
+    gate = PermissionGate(approval_callback=callback)
+    assert gate.enforce("shell_exec", {}) is None      # approved
+    assert gate.enforce("file_write", {}) is not None   # rejected
+    assert gate.enforce("git_reset", {}) is not None    # denied (no deny rule, but no allow → confirm → callback says no)
+
+    gate.deny("never")
+    assert "denied" in gate.enforce("never", {})
 
 
 # ── Helpers ──

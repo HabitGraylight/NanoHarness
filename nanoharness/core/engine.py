@@ -35,6 +35,7 @@ class NanoEngine:
         evaluator: BaseEvaluator,
         max_steps: int = 10,
         permissions: Optional[BasePermissionManager] = None,
+        tool_hooks=None,
     ):
         self.llm = llm_client
         self.tools = tools
@@ -44,6 +45,7 @@ class NanoEngine:
         self.evaluator = evaluator
         self.max_steps = max_steps
         self.permissions = permissions
+        self.tool_hooks = tool_hooks
 
     def run(self, user_query: str) -> Dict:
         self.hooks.trigger(HookStage.ON_TASK_START, user_query)
@@ -93,6 +95,29 @@ class NanoEngine:
                         )
                         continue
 
+                # PreToolUse hook
+                inject_msg = None
+                if self.tool_hooks:
+                    decision = self.tool_hooks.run_pre(call.name, call.arguments)
+                    if decision:
+                        if decision.action == 1:  # BLOCK
+                            obs = decision.message or f"Tool '{call.name}' blocked by hook"
+                            step_res.action = call.model_dump()
+                            step_res.observation = obs
+                            self.context.add_message(
+                                AgentMessage(role="tool", content=obs)
+                            )
+                            continue
+                        if decision.action == 2 and decision.message:  # INJECT
+                            inject_msg = decision.message
+
+                # Inject pre-tool message if hook requested
+                if inject_msg:
+                    self.context.add_message(
+                        AgentMessage(role="system", content=inject_msg)
+                    )
+
+                # Execute tool
                 try:
                     obs = self.tools.call(call.name, call.arguments)
                     step_res.action = call.model_dump()
@@ -100,6 +125,14 @@ class NanoEngine:
                 except Exception as exc:
                     step_res.status = "error"
                     step_res.observation = f"ToolError({call.name}): {exc}"
+
+                # PostToolUse hook
+                if self.tool_hooks and step_res.observation:
+                    decision = self.tool_hooks.run_post(
+                        call.name, call.arguments, step_res.observation
+                    )
+                    if decision and decision.action == 2 and decision.message:  # INJECT
+                        step_res.observation += "\n" + decision.message
 
                 self.context.add_message(
                     AgentMessage(role="tool", content=step_res.observation)

@@ -18,7 +18,7 @@ from nanoharness.core.prompt import PromptManager
 from nanoharness.core.schema import AgentMessage
 
 from app.context import ManagedContext
-from app.hooks import build_hooks
+from app.hooks import build_hooks, build_tool_hooks
 from app.permissions import build_permissions
 from app.skills import SkillRegistry, register_skill_tool
 from app.subagent import register_task_tool
@@ -78,6 +78,7 @@ def build_coding_engine(
 
     # --- Hooks ---
     hooks = build_hooks()
+    tool_hooks = build_tool_hooks()
 
     # --- Permissions ---
     perms = build_permissions()
@@ -93,6 +94,7 @@ def build_coding_engine(
         hooks=hooks,
         evaluator=TraceEvaluator(),
         permissions=perms,
+        tool_hooks=tool_hooks,
         max_steps=max_steps,
     )
 
