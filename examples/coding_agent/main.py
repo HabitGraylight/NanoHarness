@@ -19,7 +19,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)
 
 from app.builder import build_coding_engine
-from app.context import compress_completed_rounds, trim_to_token_limit, verify_goal
+from app.context import verify_goal
 from app.ui import BANNER, read_input
 
 _BOLD = "\033[1m"
@@ -55,9 +55,9 @@ def run_repl(engine):
             # Post-run: verify goal completion
             _print_goal_verification(engine, query, report)
 
-            # Post-run: compress context for next round
-            compress_completed_rounds(engine.context)
-            trim_to_token_limit(engine.context)
+            # Post-run: optimize context for next round (compress → summarize)
+            engine.context.compress_old()
+            engine.context.summarize_if_needed()
 
         except KeyboardInterrupt:
             print(f"\n  Interrupted.")

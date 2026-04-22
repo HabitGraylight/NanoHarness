@@ -178,74 +178,137 @@ def test_ui_banner():
     assert "/quit" in HELP_TEXT
 
 
-# ── Context management tests ──
+# ── Context management tests (three-layer) ──
 
 
-def test_context_compress_truncates_old_tool_obs(tmp_path):
-    """compress_completed_rounds truncates old tool observations, keeps recent."""
-    from app.context import compress_completed_rounds
+def _make_managed_context(tmp_path, llm=None, **kwargs):
+    from app.context import ManagedContext
+    scratch = str(tmp_path / "scratch")
+    return ManagedContext(
+        inner=SimpleContextManager(system_prompt="System."),
+        scratch_dir=scratch,
+        llm_client=llm,
+        **kwargs,
+    )
 
-    ctx = SimpleContextManager(system_prompt="System.")
-    # Round 1
+
+def test_context_layer1_spill_large_obs(tmp_path):
+    """Layer 1: large tool result gets spilled to disk, preview stays in context."""
+    ctx = _make_managed_context(tmp_path, spill_threshold=200)
+    long_content = "line\n" * 100  # 500 chars
+    ctx.add_message(AgentMessage(role="tool", content=long_content))
+
+    msg = ctx._messages[-1]
+    assert msg.role == "tool"
+    assert len(msg.content) < len(long_content)
+    assert "saved to" in msg.content
+    # Scratch file should exist
+    import glob
+    spill_files = glob.glob(str(tmp_path / "scratch" / "spill_*.txt"))
+    assert len(spill_files) == 1
+    assert open(spill_files[0]).read() == long_content
+
+
+def test_context_layer1_small_obs_stays(tmp_path):
+    """Layer 1: small tool result stays in context unchanged."""
+    ctx = _make_managed_context(tmp_path, spill_threshold=2000)
+    ctx.add_message(AgentMessage(role="tool", content="Short result"))
+    assert ctx._messages[-1].content == "Short result"
+
+
+def test_context_layer1_non_tool_not_spilled(tmp_path):
+    """Layer 1: non-tool messages are never spilled."""
+    ctx = _make_managed_context(tmp_path, spill_threshold=10)
+    long_text = "x" * 5000
+    ctx.add_message(AgentMessage(role="assistant", content=long_text))
+    assert ctx._messages[-1].content == long_text
+
+
+def test_context_layer2_compress_old(tmp_path):
+    """Layer 2: old tool observations get compressed to placeholders."""
+    ctx = _make_managed_context(tmp_path, compress_chars=100)
+    # Round 1 (old)
     ctx.add_message(AgentMessage(role="user", content="Task 1"))
     ctx.add_message(AgentMessage(role="assistant", content="Thinking..."))
-    ctx.add_message(AgentMessage(role="tool", content="A" * 2000))  # long obs
+    ctx.add_message(AgentMessage(role="tool", content="A" * 2000))  # long old obs
     ctx.add_message(AgentMessage(role="assistant", content="Done."))
     # Round 2 (current)
     ctx.add_message(AgentMessage(role="user", content="Task 2"))
-    ctx.add_message(AgentMessage(role="assistant", content="Thinking..."))
     ctx.add_message(AgentMessage(role="tool", content="B" * 2000))  # recent obs
 
-    compress_completed_rounds(ctx, max_obs_chars=300)
+    ctx.compress_old()
 
     msgs = ctx._messages
-    # System preserved
-    assert msgs[0].role == "system"
-    # Old tool obs truncated
+    # Old tool obs compressed
     old_tool = msgs[3]
     assert old_tool.role == "tool"
-    assert len(old_tool.content) < 400
-    assert "truncated" in old_tool.content
+    assert "compressed" in old_tool.content
+    assert len(old_tool.content) < 200
     # Recent tool obs preserved
-    recent_tool = msgs[7]
+    recent_tool = msgs[6]
     assert recent_tool.role == "tool"
-    assert len(recent_tool.content) == 2000  # untouched
+    assert len(recent_tool.content) == 2000
     # Assistant messages preserved
     assert msgs[2].content == "Thinking..."
     assert msgs[4].content == "Done."
 
 
-def test_context_compress_keeps_short_obs(tmp_path):
-    """Short tool observations are kept as-is."""
-    from app.context import compress_completed_rounds
-
-    ctx = SimpleContextManager()
+def test_context_layer2_short_obs_kept(tmp_path):
+    """Layer 2: short old observations pass through unchanged."""
+    ctx = _make_managed_context(tmp_path, compress_chars=500)
     ctx.add_message(AgentMessage(role="user", content="Task"))
     ctx.add_message(AgentMessage(role="tool", content="Short output"))
+    ctx.compress_old()
+    tool_msgs = [m for m in ctx._messages if m.role == "tool"]
+    assert tool_msgs[0].content == "Short output"
 
-    compress_completed_rounds(ctx, max_obs_chars=500)
 
-    assert ctx._messages[1].content == "Short output"
+def test_context_layer3_summarize_when_long(tmp_path):
+    """Layer 3: long context triggers LLM summarization."""
+    class SummaryLLM:
+        def chat(self, messages, tools=None):
+            return LLMResponse(content="User asked to fix a bug. Assistant read the file.", tool_calls=None)
+
+    ctx = _make_managed_context(tmp_path, llm=SummaryLLM(), token_limit=50)
+    # Add many messages to exceed limit
+    for i in range(20):
+        ctx.add_message(AgentMessage(role="user", content=f"Task {i} " + "x" * 50))
+        ctx.add_message(AgentMessage(role="assistant", content=f"Done {i}"))
+        ctx.add_message(AgentMessage(role="tool", content=f"Result {i} " + "y" * 50))
+
+    original_len = len(ctx._messages)
+    ctx.summarize_if_needed()
+
+    # Should be shorter
+    assert len(ctx._messages) < original_len
+    # System prompt should survive
+    assert ctx._messages[0].role == "system"
+    assert ctx._messages[0].content == "System."
+    # Should have a summary message
+    summaries = [m for m in ctx._messages if m.role == "system" and "Summary" in m.content]
+    assert len(summaries) >= 1
 
 
-def test_trim_to_token_limit(tmp_path):
-    """trim_to_token_limit drops old messages when context is too long."""
-    from app.context import trim_to_token_limit
+def test_context_layer3_no_summarize_when_short(tmp_path):
+    """Layer 3: short context is left alone."""
+    ctx = _make_managed_context(tmp_path, token_limit=8000)
+    ctx.add_message(AgentMessage(role="user", content="Hi"))
+    ctx.add_message(AgentMessage(role="assistant", content="Hello"))
+    original = list(ctx._messages)
+    ctx.summarize_if_needed()
+    assert ctx._messages == original
 
-    ctx = SimpleContextManager(system_prompt="System prompt here.")
-    ctx.add_message(AgentMessage(role="user", content="Task 1"))
-    ctx.add_message(AgentMessage(role="assistant", content="Thinking"))
-    ctx.add_message(AgentMessage(role="user", content="Task 2"))
-    ctx.add_message(AgentMessage(role="assistant", content="Done"))
 
-    # Set a very low limit to force trimming
-    trim_to_token_limit(ctx, token_limit=5)
-
-    msgs = ctx._messages
-    # System should survive
-    assert msgs[0].role == "system"
-    # Old messages should be dropped
-    assert len(msgs) < 5
+def test_context_layer3_fallback_without_llm(tmp_path):
+    """Layer 3: without LLM, falls back to trimming."""
+    ctx = _make_managed_context(tmp_path, llm=None, token_limit=20)
+    for i in range(20):
+        ctx.add_message(AgentMessage(role="user", content=f"Task {i} " * 20))
+        ctx.add_message(AgentMessage(role="assistant", content=f"Done {i}"))
+    ctx.summarize_if_needed()
+    # System prompt survives, messages dropped
+    assert ctx._messages[0].role == "system"
+    assert len(ctx._messages) < 40
 
 
 def test_goal_verify_achieved():

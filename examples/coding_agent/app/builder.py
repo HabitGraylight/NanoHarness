@@ -17,6 +17,7 @@ from nanoharness.core.engine import NanoEngine
 from nanoharness.core.prompt import PromptManager
 from nanoharness.core.schema import AgentMessage
 
+from app.context import ManagedContext
 from app.hooks import build_hooks
 from app.permissions import build_permissions
 from app.skills import SkillRegistry, register_skill_tool
@@ -58,9 +59,14 @@ def build_coding_engine(
     memory = SimpleMemoryManager(persist_path=os.path.join(SANDBOX, "memory.json"))
     register_memory_tools(registry=tools, memory=memory)
 
-    # --- Context (created before subagent so fork can reference it) ---
+    # --- Context (three-layer managed: spill → compress → summarize) ---
     system_prompt = prompts.get("system.coding_agent")
-    context = SimpleContextManager(system_prompt=system_prompt)
+    scratch_dir = os.path.join(SANDBOX, "scratch")
+    context = ManagedContext(
+        inner=SimpleContextManager(system_prompt=system_prompt),
+        scratch_dir=scratch_dir,
+        llm_client=llm,
+    )
 
     # --- Subagent (needs llm + context for fork support) ---
     register_task_tool(registry=tools, llm_client=llm, parent_context=context)
