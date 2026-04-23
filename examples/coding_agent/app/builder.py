@@ -8,7 +8,7 @@ import os
 
 from nanoharness.components.context.simple_context import SimpleContextManager
 from nanoharness.components.evaluator.trace_evaluator import TraceEvaluator
-from app.adapters import OpenAIAdapter, SimpleMemoryManager
+from app.adapters import OpenAIAdapter
 from app.handlers import register_memory_tools
 from nanoharness.components.state.json_store import JsonStateStore
 from nanoharness.core.base import HookStage
@@ -18,6 +18,7 @@ from nanoharness.core.schema import AgentMessage
 
 from app.context import ManagedContext
 from app.hooks import build_hooks, build_tool_hooks
+from app.memory import FileMemoryManager
 from app.permissions import build_permissions
 from app.skills import SkillRegistry, register_skill_tool
 from app.subagent import register_task_tool
@@ -35,7 +36,8 @@ def build_coding_engine(
 ) -> NanoEngine:
     """Build and return a configured NanoEngine for coding tasks.
 
-    Runtime files (memory, state) are stored in sandbox/.
+    Runtime files (state) are stored in sandbox/.
+    Memory files are stored in .memory/ (persisted across sessions).
     """
     os.makedirs(SANDBOX, exist_ok=True)
 
@@ -54,8 +56,9 @@ def build_coding_engine(
     scripts_dir = os.path.join(workspace_root, "configs", "scripts")
     tools = build_tools(scripts_dir=scripts_dir, workspace_root=workspace_root)
 
-    # --- Memory ---
-    memory = SimpleMemoryManager(persist_path=os.path.join(SANDBOX, "memory.json"))
+    # --- Memory (file-based: .memory/ directory) ---
+    memory_dir = os.path.join(workspace_root, ".memory")
+    memory = FileMemoryManager(memory_dir)
     register_memory_tools(registry=tools, memory=memory)
 
     # --- Context (three-layer managed: spill → compress → summarize) ---
@@ -99,33 +102,15 @@ def build_coding_engine(
 
 
 def _wire_memory_hooks(hooks, memory, prompts, context):
-    """Register hooks that inject relevant memories before each run
-    and persist a summary after the run completes."""
+    """Register hooks that inject memory index at session start."""
     def on_task_start(query):
-        memory.clear_working()
-        related = memory.recall(query)
-        if related:
-            entries = "\n".join(f"[{e.key}] {e.content}" for e in related)
+        index = memory.load_for_injection()
+        if index:
             context.add_message(
                 AgentMessage(
                     role="system",
-                    content=prompts.render("memory.inject", entries=entries),
+                    content=prompts.render("memory.inject", index=index),
                 )
             )
 
-    def on_task_end(report):
-        summary = prompts.render(
-            "memory.store_summary",
-            query="",
-            steps=report["summary"]["total_steps"],
-            success=report["summary"]["success"],
-        )
-        memory.store(
-            key=f"run:{report['summary']['total_steps']}",
-            content=summary,
-            total_steps=report["summary"]["total_steps"],
-            success=report["summary"]["success"],
-        )
-
     hooks.register(HookStage.ON_TASK_START, on_task_start)
-    hooks.register(HookStage.ON_TASK_END, on_task_end)

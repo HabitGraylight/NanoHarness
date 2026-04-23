@@ -33,7 +33,7 @@ class NanoEngine:
         hooks: BaseHookManager,
         evaluator: BaseEvaluator,
         max_steps: int = 10,
-        permissions: Optional[Any] = None,  # satisfies BasePermissionManager interface
+        permissions: Optional[Any] = None,  # duck-typed: needs enforce(name, args) -> str|None
         tool_hooks=None,
     ):
         self.llm = llm_client

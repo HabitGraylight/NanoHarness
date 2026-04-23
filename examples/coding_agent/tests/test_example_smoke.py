@@ -18,7 +18,8 @@ from nanoharness.components.hooks.simple_hooks import SimpleHookManager
 from nanoharness.components.state.json_store import JsonStateStore
 from nanoharness.core.engine import NanoEngine
 from nanoharness.core.prompt import PromptManager
-from nanoharness.core.schema import AgentMessage, LLMResponse, PermissionLevel
+from nanoharness.core.schema import AgentMessage, LLMResponse
+from app.permissions import PermissionLevel
 
 
 class MockLLMClient:

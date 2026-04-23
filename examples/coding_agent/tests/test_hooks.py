@@ -299,7 +299,7 @@ class TestEngineWithToolHooks:
         from nanoharness.components.hooks.simple_hooks import SimpleHookManager
         from nanoharness.components.state.json_store import JsonStateStore
         from nanoharness.core.engine import NanoEngine
-        from app.dispatch import DispatchRegistry
+        from app.dispatch import DispatchRegistry, tool_result
 
         class DoneLLM:
             def chat(self, messages, tools=None):

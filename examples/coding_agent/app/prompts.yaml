@@ -26,11 +26,8 @@ system.coding_agent: |
 # ── Memory ──
 
 memory.inject: |
-  [Memory] The following memories may be relevant to the current task:
-  {entries}
-
-memory.store_summary: |
-  Query: {query} | Steps: {steps} | Success: {success}
+  [Memory] The following memories are available from previous sessions. Use recall_memory to read full content of any entry:
+  {index}
 
 # ── Permission ──
 
@@ -47,8 +44,6 @@ tool.error: "ToolError({tool_name}): {error}"
 
 # ── Memory Tools ──
 
-tool.memory_store.description: "Store a piece of information in long-term memory for later recall."
-tool.memory_recall.description: "Recall relevant memories by searching with a keyword."
-tool.memory_store.success: "Stored under key '{key}'."
-tool.memory_recall.empty: "No matching memories found."
-tool.memory_recall.entry: "[{key}] {content}"
+tool.save_memory.description: "Save important information to long-term memory for future sessions."
+tool.recall_memory.description: "Search long-term memories by keyword."
+tool.list_memories.description: "List all stored memories."

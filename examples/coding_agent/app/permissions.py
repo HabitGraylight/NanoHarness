@@ -21,11 +21,28 @@ Modes:
 """
 
 import fnmatch
+from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Callable, Dict, List, Optional
 
-from nanoharness.core.base import BasePermissionManager
-from nanoharness.core.schema import PermissionLevel
+
+# ── App-layer types (engine duck-types these) ──
+
+
+class PermissionLevel(str, Enum):
+    DENY = "deny"
+    CONFIRM = "confirm"
+    ALLOW = "allow"
+
+
+class BasePermissionManager(ABC):
+    """App-layer ABC — engine duck-types enforce()."""
+
+    @abstractmethod
+    def check(self, tool_name: str, args: Dict) -> PermissionLevel: ...
+
+    @abstractmethod
+    def enforce(self, tool_name: str, args: Dict) -> Optional[str]: ...
 
 
 class GateMode(str, Enum):
@@ -164,8 +181,9 @@ def build_permissions() -> PermissionGate:
     gate.allow("git_remote_list")
     gate.allow("git_stash_list")
     gate.allow("sys_info")
-    gate.allow("memory_store")
-    gate.allow("memory_recall")
+    gate.allow("save_memory")
+    gate.allow("recall_memory")
+    gate.allow("list_memories")
     gate.allow("skill")
     gate.allow("task")
 

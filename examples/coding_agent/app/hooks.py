@@ -1,34 +1,68 @@
 """Coding agent hooks: lifecycle display + tool execution interception.
 
 Two hook systems:
-    1. SimpleHookManager — lifecycle events (task start/end, step end, thought)
-    2. ToolHookRunner — pre/post tool execution interception
-
-Tool hook pipeline:
-    model → tool_use
-        │
-        ▼
-    PreToolUse hooks
-        ├─ BLOCK (exit 1)  → stop, return error as observation
-        ├─ INJECT (exit 2) → add a message for the model, then continue
-        └─ CONTINUE (exit 0) → proceed normally
-        │
-        ▼
-    execute tool
-        │
-        ▼
-    PostToolUse hooks
-        ├─ INJECT (exit 2) → append supplementary note to observation
-        └─ CONTINUE (exit 0) → normal finish
+    1. SimpleHookManager — lifecycle events (from kernel)
+    2. ToolHookRunner — pre/post tool execution interception (app-layer)
 """
 
 import fnmatch
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from nanoharness.components.hooks.simple_hooks import SimpleHookManager
-from nanoharness.core.base import HookStage
+from nanoharness.core.base import BaseComponent, HookStage
+
+
+# ── Tool hook types (app-layer, engine duck-types these) ──
+
+
+class HookAction(IntEnum):
+    CONTINUE = 0
+    BLOCK = 1
+    INJECT = 2
+
+
+@dataclass
+class HookDecision:
+    action: HookAction
+    message: Optional[str] = None
+
+
+PreHookFn = Callable[[str, Dict], Optional[HookDecision]]
+PostHookFn = Callable[[str, Dict, str], Optional[HookDecision]]
+
+
+class ToolHookRunner(BaseComponent):
+    def __init__(self):
+        self._pre_hooks: List[Tuple[str, PreHookFn]] = []
+        self._post_hooks: List[Tuple[str, PostHookFn]] = []
+
+    def register_pre(self, pattern: str, hook: PreHookFn):
+        self._pre_hooks.append((pattern, hook))
+
+    def register_post(self, pattern: str, hook: PostHookFn):
+        self._post_hooks.append((pattern, hook))
+
+    def run_pre(self, tool_name: str, args: Dict) -> Optional[HookDecision]:
+        for pattern, hook in self._pre_hooks:
+            if fnmatch.fnmatch(tool_name, pattern):
+                result = hook(tool_name, args)
+                if result is not None:
+                    return result
+        return None
+
+    def run_post(self, tool_name: str, args: Dict, result: str) -> Optional[HookDecision]:
+        for pattern, hook in self._post_hooks:
+            if fnmatch.fnmatch(tool_name, pattern):
+                decision = hook(tool_name, args, result)
+                if decision is not None:
+                    return decision
+        return None
+
+    def reset(self):
+        self._pre_hooks.clear()
+        self._post_hooks.clear()
 
 # ── ANSI colors ──
 
@@ -40,84 +74,6 @@ _YELLOW = "\033[33m"
 _RED = "\033[31m"
 _BLUE = "\033[34m"
 _RESET = "\033[0m"
-
-
-# ═══════════════════════════════════════════════════════
-#  Tool Hook Runner (pre/post tool execution)
-# ═══════════════════════════════════════════════════════
-
-
-class HookAction(IntEnum):
-    """Exit codes for tool hooks."""
-    CONTINUE = 0   # proceed normally
-    BLOCK = 1      # stop tool execution
-    INJECT = 2     # add a message, then proceed
-
-
-@dataclass
-class HookDecision:
-    """Return value from a hook function."""
-    action: HookAction
-    message: Optional[str] = None
-
-
-# Type aliases for hook function signatures
-PreHookFn = Callable[[str, Dict], Optional[HookDecision]]
-PostHookFn = Callable[[str, Dict, str], Optional[HookDecision]]
-
-
-class ToolHookRunner:
-    """Runs pre/post tool hooks matched by glob patterns.
-
-    Usage:
-        runner = ToolHookRunner()
-        runner.register_pre("shell_exec", my_pre_hook)
-        runner.register_post("file_read", my_post_hook)
-
-        # Before tool execution
-        decision = runner.run_pre("shell_exec", {"command": "rm -rf /"})
-        if decision and decision.action == HookAction.BLOCK:
-            ...  # stop
-
-        # After tool execution
-        decision = runner.run_post("file_read", {"path": "x"}, "output...")
-        if decision and decision.action == HookAction.INJECT:
-            obs += decision.message
-    """
-
-    def __init__(self):
-        self._pre_hooks: List[Tuple[str, PreHookFn]] = []
-        self._post_hooks: List[Tuple[str, PostHookFn]] = []
-
-    def register_pre(self, pattern: str, hook: PreHookFn):
-        """Register a pre-tool hook. pattern is a glob (e.g. 'shell_exec', 'git_*')."""
-        self._pre_hooks.append((pattern, hook))
-
-    def register_post(self, pattern: str, hook: PostHookFn):
-        """Register a post-tool hook."""
-        self._post_hooks.append((pattern, hook))
-
-    def run_pre(self, tool_name: str, args: Dict) -> Optional[HookDecision]:
-        """Run all matching pre-hooks. First non-None decision wins."""
-        for pattern, hook in self._pre_hooks:
-            if fnmatch.fnmatch(tool_name, pattern):
-                result = hook(tool_name, args)
-                if result is not None:
-                    return result
-        return None
-
-    def run_post(self, tool_name: str, args: Dict, result: str) -> Optional[HookDecision]:
-        """Run all matching post-hooks. First non-None decision wins."""
-        for pattern, hook in self._post_hooks:
-            if fnmatch.fnmatch(tool_name, pattern):
-                decision = hook(tool_name, args, result)
-                if decision is not None:
-                    return decision
-        return None
-
-    def reset(self):
-        self._pre_hooks.clear()
-        self._post_hooks.clear()
 
 
 # ═══════════════════════════════════════════════════════
@@ -195,12 +151,12 @@ def _on_task_end(report):
 
 
 # ═══════════════════════════════════════════════════════
-#  Example tool hooks
+#  App-specific tool hooks
 # ═══════════════════════════════════════════════════════
 
 
 def build_tool_hooks() -> ToolHookRunner:
-    """Build tool hook runner with example hooks."""
+    """Build tool hook runner with app-specific hooks."""
     runner = ToolHookRunner()
     runner.register_pre("shell_exec", _warn_dangerous_commands)
     runner.register_post("file_read", _hint_large_output)

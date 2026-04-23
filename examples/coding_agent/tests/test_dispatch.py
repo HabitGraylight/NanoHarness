@@ -62,7 +62,7 @@ class TestSandbox:
 # ── tool_result ──
 
 
-class TestToolResult:
+class Testtool_result:
     def test_ok_result(self):
         r = tool_result(ok=True, output="hello")
         assert r.ok
