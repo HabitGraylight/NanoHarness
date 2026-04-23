@@ -8,8 +8,7 @@ import os
 
 from nanoharness.components.context.simple_context import SimpleContextManager
 from nanoharness.components.evaluator.trace_evaluator import TraceEvaluator
-from nanoharness.components.llm.openai_adapter import OpenAIAdapter
-from nanoharness.components.memory.simple_memory import SimpleMemoryManager
+from app.adapters import OpenAIAdapter, SimpleMemoryManager
 from app.handlers import register_memory_tools
 from nanoharness.components.state.json_store import JsonStateStore
 from nanoharness.core.base import HookStage

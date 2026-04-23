@@ -3,8 +3,6 @@ from nanoharness.core.base import (
     BaseContextManager,
     BaseEvaluator,
     BaseHookManager,
-    BaseMemoryManager,
-    BasePermissionManager,
     BaseStateStore,
     BaseToolRegistry,
     HookStage,
@@ -15,9 +13,6 @@ from nanoharness.core.prompt import PromptManager
 from nanoharness.core.schema import (
     AgentMessage,
     LLMResponse,
-    MemoryEntry,
-    PermissionLevel,
-    PermissionRule,
     StepResult,
     ToolCall,
 )

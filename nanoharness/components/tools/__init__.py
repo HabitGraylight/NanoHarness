@@ -1,1 +1,2 @@
 from nanoharness.components.tools.dict_registry import DictToolRegistry
+from nanoharness.components.tools.script_tools import ScriptToolRegistry

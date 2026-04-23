@@ -5,8 +5,6 @@ from typing import Any, Dict, List, Optional, Protocol
 from nanoharness.core.schema import (
     AgentMessage,
     LLMResponse,
-    MemoryEntry,
-    PermissionLevel,
     StepResult,
 )
 
@@ -80,37 +78,4 @@ class BaseHookManager(BaseComponent):
 
     @abc.abstractmethod
     def trigger(self, stage: str, data: Any):
-        pass
-
-
-class BasePermissionManager(BaseComponent):
-    @abc.abstractmethod
-    def check(self, tool_name: str, args: Dict) -> PermissionLevel:
-        pass
-
-    @abc.abstractmethod
-    def enforce(self, tool_name: str, args: Dict) -> Optional[str]:
-        """Check permissions and handle approval.
-
-        Returns None if the tool call is allowed, or an error message
-        string if the call should be blocked.
-        """
-        pass
-
-
-class BaseMemoryManager(BaseComponent):
-    @abc.abstractmethod
-    def store(self, key: str, content: str, **metadata) -> None:
-        pass
-
-    @abc.abstractmethod
-    def recall(self, query: str, top_k: int = 5) -> List[MemoryEntry]:
-        pass
-
-    @abc.abstractmethod
-    def get_working(self) -> Dict[str, Any]:
-        pass
-
-    @abc.abstractmethod
-    def set_working(self, data: Dict[str, Any]) -> None:
         pass

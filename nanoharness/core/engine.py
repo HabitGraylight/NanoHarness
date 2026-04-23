@@ -1,10 +1,9 @@
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from nanoharness.core.base import (
     BaseContextManager,
     BaseEvaluator,
     BaseHookManager,
-    BasePermissionManager,
     BaseStateStore,
     BaseToolRegistry,
     HookStage,
@@ -34,7 +33,7 @@ class NanoEngine:
         hooks: BaseHookManager,
         evaluator: BaseEvaluator,
         max_steps: int = 10,
-        permissions: Optional[BasePermissionManager] = None,
+        permissions: Optional[Any] = None,  # satisfies BasePermissionManager interface
         tool_hooks=None,
     ):
         self.llm = llm_client
