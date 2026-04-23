@@ -91,7 +91,7 @@ coding_agent/
 
 ## Available Tools
 
-30 tools registered:
+31 tools registered:
 
 | Tool | Source | Description |
 |---|---|---|
@@ -114,6 +114,7 @@ coding_agent/
 | `git_pull` | script | Pull from remote |
 | `shell_exec` | script | Run arbitrary shell commands |
 | `sys_info` | script | System information |
+| `you_search` | script | Web search via you.com Search API |
 | `search_code` | python | Regex grep in source files |
 | `list_files` | python | List files by glob pattern |
 | `memory_store` | python | Store info for cross-session recall |
