@@ -85,8 +85,8 @@ def test_prompts_load():
     """Coding-agent-specific prompts load from app/prompts.yaml."""
     prompts_path = os.path.join(os.path.dirname(__file__), "..", "app", "prompts.yaml")
     pm = PromptManager.from_file(prompts_path)
-    assert "system.coding_agent" in pm.keys()
-    assert "software engineer" in pm.get("system.coding_agent").lower()
+    assert "segment.core_identity" in pm.keys()
+    assert "software engineer" in pm.get("segment.core_identity").lower()
 
 
 def test_hooks_build():

@@ -3,7 +3,7 @@
 
 # ── System Prompts ──
 
-system.coding_agent: |
+segment.core_identity: |
   You are an expert software engineer acting as a coding assistant. You have access to tools for:
   - Reading, writing, and editing files
   - Running shell commands (build, test, lint)

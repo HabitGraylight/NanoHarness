@@ -20,6 +20,7 @@ from app.context import ManagedContext
 from app.hooks import build_hooks, build_tool_hooks
 from app.memory import FileMemoryManager
 from app.permissions import build_permissions
+from app.prompt_builder import SystemPromptBuilder
 from app.skills import SkillRegistry, register_skill_tool
 from app.subagent import register_task_tool
 from app.tools import build_tools
@@ -61,8 +62,21 @@ def build_coding_engine(
     memory = FileMemoryManager(memory_dir)
     register_memory_tools(registry=tools, memory=memory)
 
+    # --- Skills ---
+    skills_dir = os.path.join(workspace_root, "skills")
+    skill_reg = SkillRegistry(skills_dir)
+    register_skill_tool(registry=tools, skill_registry=skill_reg)
+
+    # --- System prompt (five segments) ---
+    prompt_builder = SystemPromptBuilder(
+        prompts=prompts,
+        skill_registry=skill_reg,
+        memory=memory,
+        workspace_root=workspace_root,
+    )
+    system_prompt = prompt_builder.build()
+
     # --- Context (three-layer managed: spill → compress → summarize) ---
-    system_prompt = prompts.get("system.coding_agent")
     scratch_dir = os.path.join(SANDBOX, "scratch")
     context = ManagedContext(
         inner=SimpleContextManager(system_prompt=system_prompt),
@@ -73,11 +87,6 @@ def build_coding_engine(
     # --- Subagent (needs llm + context for fork support) ---
     register_task_tool(registry=tools, llm_client=llm, parent_context=context)
 
-    # --- Skills ---
-    skills_dir = os.path.join(workspace_root, "skills")
-    skill_reg = SkillRegistry(skills_dir)
-    register_skill_tool(registry=tools, skill_registry=skill_reg)
-
     # --- Hooks ---
     hooks = build_hooks()
     tool_hooks = build_tool_hooks()
@@ -85,8 +94,8 @@ def build_coding_engine(
     # --- Permissions ---
     perms = build_permissions()
 
-    # --- Wire memory lifecycle hooks ---
-    _wire_memory_hooks(hooks, memory, prompts, context)
+    # --- Wire system prompt refresh (rebuilds dynamic segments per task) ---
+    _wire_system_prompt_refresh(hooks, prompt_builder, context)
 
     return NanoEngine(
         llm_client=llm,
@@ -101,16 +110,17 @@ def build_coding_engine(
     )
 
 
-def _wire_memory_hooks(hooks, memory, prompts, context):
-    """Register hooks that inject memory index at session start."""
+def _wire_system_prompt_refresh(hooks, prompt_builder, context):
+    """Register hook that refreshes the system prompt at each task start.
+
+    Replaces the first system message with a freshly built prompt,
+    ensuring memory, environment, and NanoCA.md are current.
+    """
     def on_task_start(query):
-        index = memory.load_for_injection()
-        if index:
-            context.add_message(
-                AgentMessage(
-                    role="system",
-                    content=prompts.render("memory.inject", index=index),
-                )
-            )
+        refreshed = prompt_builder.build()
+        if context._messages and context._messages[0].role == "system":
+            context._messages[0] = AgentMessage(role="system", content=refreshed)
+        else:
+            context._messages.insert(0, AgentMessage(role="system", content=refreshed))
 
     hooks.register(HookStage.ON_TASK_START, on_task_start)
