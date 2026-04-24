@@ -93,7 +93,7 @@ nanoharness/
   utils/                 # get_logger, count_tokens
 configs/
   prompts.yaml           # Prompt templates
-  scripts/               # Shell-script tools (auto-discovered, 27 tools)
+  scripts/               # Shell-script tools (auto-discovered, 26 tools)
 examples/
   coding_agent/          # Full-featured coding agent reference
 tests/                   # 63 tests
@@ -162,28 +162,6 @@ Two built-in registries:
 Registries compose via `merge()`.
 
 Adding a new tool does not require touching any Python code — drop a shell script with the right headers into `configs/scripts/` and it is automatically available to the agent.
-
-### Optional web search via you.com
-
-NanoHarness now includes a ready-to-use script tool: `you_search`.
-
-Setup:
-
-```bash
-# Optional for higher limits. Search API also supports a free unauthenticated tier.
-export YDC_API_KEY="your_key_here"
-```
-
-Usage (from agent tool call or direct shell):
-
-```bash
-query="latest model context protocol updates" count=5 bash configs/scripts/you_search.sh
-```
-
-Error handling and fallback behavior:
-
-- Script returns a non-zero exit code on non-2xx responses and includes status/body preview.
-- If `YDC_API_KEY` is missing, it still runs unauthenticated (subject to API limits).
 
 ---
 

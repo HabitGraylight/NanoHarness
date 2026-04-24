@@ -34,7 +34,7 @@ SCRIPTS_DIR = "configs/scripts"
 class TestScriptRegistryLoading:
     def test_loads_all_scripts(self):
         reg = ScriptToolRegistry(SCRIPTS_DIR)
-        assert len(reg.get_tool_schemas()) == 27
+        assert len(reg.get_tool_schemas()) == 26
 
     def test_git_tools_present(self):
         reg = ScriptToolRegistry(SCRIPTS_DIR)
@@ -53,11 +53,6 @@ class TestScriptRegistryLoading:
         names = [s["function"]["name"] for s in reg.get_tool_schemas()]
         for t in ["sys_info", "shell_exec"]:
             assert t in names
-
-    def test_you_search_tool_present(self):
-        reg = ScriptToolRegistry(SCRIPTS_DIR)
-        names = [s["function"]["name"] for s in reg.get_tool_schemas()]
-        assert "you_search" in names
 
     def test_schema_has_parameters(self):
         reg = ScriptToolRegistry(SCRIPTS_DIR)
