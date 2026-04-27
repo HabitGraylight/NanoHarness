@@ -10,6 +10,7 @@ from nanoharness.components.context.simple_context import SimpleContextManager
 from nanoharness.components.evaluator.trace_evaluator import TraceEvaluator
 from app.adapters import OpenAIAdapter
 from app.handlers import register_memory_tools
+from app.resilient_llm import ResilientLLM
 from nanoharness.components.state.json_store import JsonStateStore
 from nanoharness.core.base import HookStage
 from nanoharness.core.engine import NanoEngine
@@ -45,7 +46,7 @@ def build_coding_engine(
     api_key = api_key or os.environ["DEEPSEEK_API_KEY"]
 
     # --- LLM ---
-    llm = OpenAIAdapter(api_key=api_key, model=model, base_url=base_url)
+    raw_llm = OpenAIAdapter(api_key=api_key, model=model, base_url=base_url)
 
     # --- Prompts ---
     prompts = PromptManager.from_file(
@@ -81,8 +82,16 @@ def build_coding_engine(
     context = ManagedContext(
         inner=SimpleContextManager(system_prompt=system_prompt),
         scratch_dir=scratch_dir,
-        llm_client=llm,
+        llm_client=raw_llm,
     )
+
+    # --- Wrap LLM with error recovery ---
+    def compress_context():
+        context.compress_old()
+        context.summarize_if_needed()
+        return context.get_full_context()
+
+    llm = ResilientLLM(raw_llm, context_compressor=compress_context)
 
     # --- Subagent (needs llm + context for fork support) ---
     register_task_tool(registry=tools, llm_client=llm, parent_context=context)

@@ -12,6 +12,11 @@ from openai import OpenAI
 from nanoharness.core.schema import LLMResponse, ToolCall
 
 
+class DetailedLLMResponse(LLMResponse):
+    """LLMResponse with stop_reason — used by ResilientLLM for error recovery."""
+    stop_reason: str = "end_turn"  # end_turn | tool_use | length | content_filter
+
+
 class OpenAIAdapter:
     """OpenAI-compatible LLM adapter (satisfies LLMProtocol)."""
 
@@ -28,7 +33,7 @@ class OpenAIAdapter:
         self,
         messages: List[Dict[str, Any]],
         tools: Optional[List[Dict[str, Any]]] = None,
-    ) -> LLMResponse:
+    ) -> DetailedLLMResponse:
         kwargs = {"model": self._model, "messages": messages}
         if tools:
             kwargs["tools"] = tools
@@ -43,4 +48,8 @@ class OpenAIAdapter:
                 )
                 for tc in choice.message.tool_calls
             ]
-        return LLMResponse(content=choice.message.content or "", tool_calls=tool_calls)
+        return DetailedLLMResponse(
+            content=choice.message.content or "",
+            tool_calls=tool_calls,
+            stop_reason=choice.finish_reason or "end_turn",
+        )
