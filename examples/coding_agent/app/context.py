@@ -44,6 +44,7 @@ class ManagedContext(BaseContextManager):
         inner: SimpleContextManager,
         scratch_dir: str,
         llm_client=None,
+        bg_executor=None,
         spill_threshold: int = _SPILL_THRESHOLD,
         preview_lines: int = _PREVIEW_LINES,
         compress_chars: int = _COMPRESS_CHARS,
@@ -52,6 +53,7 @@ class ManagedContext(BaseContextManager):
         self._inner = inner
         self._scratch_dir = scratch_dir
         self._llm = llm_client
+        self._bg = bg_executor
         self._spill_threshold = spill_threshold
         self._preview_lines = preview_lines
         self._compress_chars = compress_chars
@@ -69,6 +71,13 @@ class ManagedContext(BaseContextManager):
         self._inner.add_message(msg)
 
     def get_full_context(self) -> List[dict]:
+        # Drain background task notifications before returning to the LLM
+        if self._bg:
+            for notif in self._bg.drain():
+                self._inner.add_message(AgentMessage(
+                    role="system",
+                    content=notif["message"],
+                ))
         return self._inner.get_full_context()
 
     def reset(self):

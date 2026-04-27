@@ -9,6 +9,7 @@ import os
 from nanoharness.components.context.simple_context import SimpleContextManager
 from nanoharness.components.evaluator.trace_evaluator import TraceEvaluator
 from app.adapters import OpenAIAdapter
+from app.background import BackgroundExecutor, register_background_tools
 from app.handlers import register_memory_tools
 from app.resilient_llm import ResilientLLM
 from nanoharness.components.state.json_store import JsonStateStore
@@ -84,11 +85,16 @@ def build_coding_engine(
 
     # --- Context (three-layer managed: spill → compress → summarize) ---
     scratch_dir = os.path.join(SANDBOX, "scratch")
+    bg_executor = BackgroundExecutor(workspace_root, scratch_dir=scratch_dir)
     context = ManagedContext(
         inner=SimpleContextManager(system_prompt=system_prompt),
         scratch_dir=scratch_dir,
         llm_client=raw_llm,
+        bg_executor=bg_executor,
     )
+
+    # --- Background execution tools ---
+    register_background_tools(registry=tools, bg_executor=bg_executor)
 
     # --- Wrap LLM with error recovery ---
     def compress_context():
