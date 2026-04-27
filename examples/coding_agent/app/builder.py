@@ -24,6 +24,7 @@ from app.permissions import build_permissions
 from app.prompt_builder import SystemPromptBuilder
 from app.skills import SkillRegistry, register_skill_tool
 from app.subagent import register_task_tool
+from app.task_system import TaskBoard, register_task_tools
 from app.tools import build_tools
 
 # Runtime artifacts go here
@@ -62,6 +63,10 @@ def build_coding_engine(
     memory_dir = os.path.join(workspace_root, ".memory")
     memory = FileMemoryManager(memory_dir)
     register_memory_tools(registry=tools, memory=memory)
+
+    # --- Task board ---
+    task_board = TaskBoard(persist_path=os.path.join(SANDBOX, "tasks.json"))
+    register_task_tools(registry=tools, board=task_board)
 
     # --- Skills ---
     skills_dir = os.path.join(workspace_root, "skills")
@@ -106,6 +111,9 @@ def build_coding_engine(
     # --- Wire system prompt refresh (rebuilds dynamic segments per task) ---
     _wire_system_prompt_refresh(hooks, prompt_builder, context)
 
+    # --- Wire task board awareness (compact summary on each task start) ---
+    _wire_task_awareness(hooks, task_board, context)
+
     return NanoEngine(
         llm_client=llm,
         tools=tools,
@@ -131,5 +139,46 @@ def _wire_system_prompt_refresh(hooks, prompt_builder, context):
             context._messages[0] = AgentMessage(role="system", content=refreshed)
         else:
             context._messages.insert(0, AgentMessage(role="system", content=refreshed))
+
+    hooks.register(HookStage.ON_TASK_START, on_task_start)
+
+
+def _wire_task_awareness(hooks, task_board: TaskBoard, context):
+    """Inject a compact task board summary before each user query.
+
+    Only adds a message when there are active tasks.
+    Keeps it to a single line — no task dump, just signal.
+    Format: [Task Board] ready: #3 Write tests | in_progress: #1 Design
+    """
+    def on_task_start(query):
+        active = [t for t in task_board.list() if t["status"] != "deleted"]
+        if not active:
+            return
+
+        parts = []
+        ready = task_board.ready()
+        if ready:
+            parts.append("ready: " + ", ".join(f"#{t['id']} {t['subject']}" for t in ready))
+
+        in_progress = [t for t in active if t["status"] == "in_progress"]
+        if in_progress:
+            parts.append("in_progress: " + ", ".join(
+                f"#{t['id']} {t['subject']}" + (f" ({t['owner']})" if t["owner"] else "")
+                for t in in_progress
+            ))
+
+        pending_blocked = [t for t in active if t["status"] == "pending" and t["blockedBy"]]
+        if pending_blocked:
+            parts.append("blocked: " + ", ".join(
+                f"#{t['id']} {t['subject']} (waiting on {t['blockedBy']})"
+                for t in pending_blocked
+            ))
+
+        if not parts:
+            return
+
+        summary = "[Task Board] " + " | ".join(parts)
+        # Insert right before the user query (which hasn't been added yet)
+        context._messages.append(AgentMessage(role="system", content=summary))
 
     hooks.register(HookStage.ON_TASK_START, on_task_start)
