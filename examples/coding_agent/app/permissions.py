@@ -187,6 +187,9 @@ def build_permissions() -> PermissionGate:
     gate.allow("skill")
     gate.allow("task")
 
+    # MCP tools — allow by server name prefix
+    gate.allow("mcp__filesystem__*")
+
     # Step 4: everything else → ask user
     # file_write, file_edit, shell_exec, git_commit, git_push, etc.
 

@@ -11,6 +11,8 @@ The central rule:
 
 import json
 import os
+import threading
+import time
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -68,6 +70,29 @@ def is_ready(task: Dict[str, Any]) -> bool:
     return task["status"] == TaskStatus.PENDING and not task["blockedBy"]
 
 
+def _task_allows_role(task: Dict[str, Any], role: Optional[str]) -> bool:
+    """Check if a role is allowed to claim this task."""
+    required = task.get("required_role")
+    if required is None:
+        return True
+    if role is None:
+        return False
+    return required.lower() in role.lower()
+
+
+def is_claimable(task: Dict[str, Any], role: Optional[str] = None) -> bool:
+    """A task is claimable when pending, unowned, unblocked, and role-matches."""
+    if task["status"] != TaskStatus.PENDING:
+        return False
+    if task.get("owner"):
+        return False
+    if task.get("blockedBy"):
+        return False
+    if not _task_allows_role(task, role):
+        return False
+    return True
+
+
 # ── TaskBoard ──
 
 
@@ -88,6 +113,12 @@ class TaskBoard:
         self._tasks: Dict[int, Dict[str, Any]] = {}
         self._next_id: int = 1
         self._persist_path = persist_path
+        self._lock = threading.Lock()
+        self._claim_events_path = None
+        if persist_path:
+            self._claim_events_path = os.path.join(
+                os.path.dirname(persist_path), "claim_events.jsonl"
+            )
         if persist_path and os.path.exists(persist_path):
             self._load()
 
@@ -99,6 +130,7 @@ class TaskBoard:
         description: str = "",
         blocked_by: Optional[List[int]] = None,
         owner: str = "",
+        required_role: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Create a new task and register reverse dependency links."""
         task_id = self._next_id
@@ -118,6 +150,14 @@ class TaskBoard:
             "blockedBy": blocked_by,
             "blocks": [],
             "owner": owner,
+            "required_role": required_role,
+            "claim_role": None,
+            "claimed_at": None,
+            "claim_source": None,
+            "worktree": None,
+            "worktree_state": "unbound",
+            "last_worktree": None,
+            "closeout": None,
         }
         self._tasks[task_id] = task
 
@@ -217,6 +257,62 @@ class TaskBoard:
         self._save()
         return task
 
+    # ── Claim ──
+
+    def claim_task(
+        self,
+        task_id: int,
+        owner: str,
+        role: Optional[str] = None,
+        source: str = "auto",
+    ) -> Dict[str, Any]:
+        """Atomically claim a task for a teammate.
+
+        Sets owner, status=in_progress, and claim metadata.
+        Appends a claim event to the audit log.
+        Raises ValueError if task is not claimable.
+        """
+        with self._lock:
+            task = self._require(task_id)
+            if not is_claimable(task, role):
+                raise ValueError(
+                    f"Task {task_id} is not claimable "
+                    f"(status={task['status']}, owner={task.get('owner')}, "
+                    f"blockedBy={task.get('blockedBy')}, "
+                    f"required_role={task.get('required_role')})"
+                )
+            task["owner"] = owner
+            task["status"] = TaskStatus.IN_PROGRESS
+            task["claim_role"] = role
+            task["claimed_at"] = time.time()
+            task["claim_source"] = source
+            self._save()
+            self._append_claim_event(task, owner, role, source)
+        return task
+
+    def _append_claim_event(self, task, owner, role, source):
+        """Append a claim event to the JSONL audit log."""
+        if not self._claim_events_path:
+            return
+        event = {
+            "event": "claimed",
+            "task_id": task["id"],
+            "owner": owner,
+            "role": role,
+            "source": source,
+            "ts": time.time(),
+        }
+        os.makedirs(os.path.dirname(self._claim_events_path), exist_ok=True)
+        with open(self._claim_events_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(event, ensure_ascii=False) + "\n")
+
+    def scan_unclaimed(self, role: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Return all tasks claimable by the given role, ordered by ID."""
+        return [
+            t for t in sorted(self._tasks.values(), key=lambda t: t["id"])
+            if is_claimable(t, role)
+        ]
+
     # ── Queries ──
 
     def ready(self) -> List[Dict[str, Any]]:
@@ -263,6 +359,34 @@ class TaskBoard:
                 lines.append(f"  #{t['id']} {t['subject']} (owner: {t['owner'] or 'unassigned'})")
 
         return "\n".join(lines)
+
+    # ── Worktree binding ──
+
+    def bind_worktree(self, task_id: int, name: str):
+        """Bind a worktree to a task.
+
+        Sets worktree, last_worktree, worktree_state='active'.
+        If task is pending, also sets status to in_progress.
+        """
+        task = self._require(task_id)
+        task["worktree"] = name
+        task["last_worktree"] = name
+        task["worktree_state"] = "active"
+        if task["status"] == TaskStatus.PENDING:
+            task["status"] = TaskStatus.IN_PROGRESS
+        self._save()
+
+    def unbind_worktree(self, task_id: int, action: str, closeout_record: dict):
+        """Unbind a worktree from a task after closeout.
+
+        Sets worktree=None, worktree_state to 'kept'/'removed', stores closeout.
+        """
+        task = self._require(task_id)
+        task["worktree"] = None
+        # Map closeout action to past-tense state: keep→kept, remove→removed
+        task["worktree_state"] = "kept" if action == "keep" else "removed"
+        task["closeout"] = closeout_record
+        self._save()
 
     # ── Internals ──
 
@@ -312,6 +436,7 @@ def register_task_tools(registry: DispatchRegistry, board: TaskBoard):
                 description=args.get("description", ""),
                 blocked_by=blocked_by,
                 owner=args.get("owner", ""),
+                required_role=args.get("required_role"),
             )
             return tool_result(
                 ok=True,
@@ -392,6 +517,7 @@ def register_task_tools(registry: DispatchRegistry, board: TaskBoard):
                     "description": "IDs of tasks that must complete before this one can start",
                 },
                 "owner": {"type": "string", "description": "Who is responsible for this task"},
+                "required_role": {"type": "string", "description": "Role required to auto-claim this task. None means any role can claim."},
             },
         ),
         (

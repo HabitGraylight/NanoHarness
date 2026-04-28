@@ -29,6 +29,8 @@ from app.subagent import register_task_tool
 from app.task_system import TaskBoard, register_task_tools
 from app.team import TeammateManager, register_team_tools
 from app.tools import build_tools
+from app.worktree import WorktreeRegistry, register_worktree_tools
+from app.mcp import register_mcp_tools
 
 # Runtime artifacts go here
 SANDBOX = os.path.join(os.path.dirname(os.path.dirname(__file__)), "sandbox")
@@ -71,6 +73,17 @@ def build_coding_engine(
     task_board = TaskBoard(persist_path=os.path.join(SANDBOX, "tasks.json"))
     register_task_tools(registry=tools, board=task_board)
 
+    # --- Worktree (task isolation lanes) ---
+    wt_registry = WorktreeRegistry(
+        workspace_root=workspace_root,
+        task_board=task_board,
+    )
+    register_worktree_tools(registry=tools, wt_registry=wt_registry)
+
+    # --- MCP tools (external tool servers) ---
+    mcp_config = os.path.join(workspace_root, "configs", "mcp_servers.json")
+    register_mcp_tools(registry=tools, config_path=mcp_config)
+
     # --- Skills ---
     skills_dir = os.path.join(workspace_root, "skills")
     skill_reg = SkillRegistry(skills_dir)
@@ -93,6 +106,7 @@ def build_coding_engine(
         llm_client=raw_llm,
         registry=tools,
         workspace_root=workspace_root,
+        task_board=task_board,
     )
     context = ManagedContext(
         inner=SimpleContextManager(system_prompt=system_prompt),

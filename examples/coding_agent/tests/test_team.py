@@ -24,9 +24,11 @@ from app.team import (
     _read_inbox,
     _make_envelope,
     _make_protocol_envelope,
+    _make_system_message,
     register_team_tools,
 )
 from app.dispatch import DispatchRegistry
+from app.task_system import TaskBoard, is_claimable, is_ready
 
 
 # ── Helpers ──
@@ -1109,3 +1111,344 @@ class TestProtocolTools:
 
             with pytest.raises(RuntimeError, match="request_id is required"):
                 registry.call("team_review", {"request_id": ""})
+
+
+# ── s17: Autonomous claiming ──
+
+
+class TestTaskBoardClaim:
+    """Tests for claim_task, is_claimable, scan_unclaimed, claim events."""
+
+    def test_is_claimable_pending_unowned(self):
+        board = TaskBoard()
+        board.add("Task")
+        task = board.get(1)
+        assert is_claimable(task) is True
+
+    def test_not_claimable_if_owned(self):
+        board = TaskBoard()
+        board.add("Task", owner="alice")
+        task = board.get(1)
+        assert is_claimable(task) is False
+
+    def test_not_claimable_if_blocked(self):
+        board = TaskBoard()
+        board.add("Blocker")
+        board.add("Blocked", blocked_by=[1])
+        task = board.get(2)
+        assert is_claimable(task) is False
+
+    def test_not_claimable_if_in_progress(self):
+        board = TaskBoard()
+        board.add("Task")
+        board.start(1)
+        task = board.get(1)
+        assert is_claimable(task) is False
+
+    def test_role_match_allows_claim(self):
+        board = TaskBoard()
+        board.add("Task", required_role="coder")
+        task = board.get(1)
+        assert is_claimable(task, role="junior coder") is True
+        assert is_claimable(task, role="researcher") is False
+
+    def test_no_role_can_claim_open_task(self):
+        board = TaskBoard()
+        board.add("Task")
+        task = board.get(1)
+        assert is_claimable(task, role="anything") is True
+        assert is_claimable(task) is True
+
+    def test_no_role_cannot_claim_role_restricted(self):
+        board = TaskBoard()
+        board.add("Task", required_role="coder")
+        task = board.get(1)
+        assert is_claimable(task, role=None) is False
+
+    def test_claim_task_success(self):
+        board = TaskBoard()
+        board.add("Task")
+        task = board.claim_task(1, owner="alice", role="coder", source="auto")
+        assert task["owner"] == "alice"
+        assert task["status"] == "in_progress"
+        assert task["claim_role"] == "coder"
+        assert task["claim_source"] == "auto"
+        assert task["claimed_at"] is not None
+
+    def test_claim_task_not_claimable_raises(self):
+        board = TaskBoard()
+        board.add("Task", owner="bob")
+        with pytest.raises(ValueError, match="not claimable"):
+            board.claim_task(1, owner="alice")
+
+    def test_claim_task_role_mismatch_raises(self):
+        board = TaskBoard()
+        board.add("Task", required_role="coder")
+        with pytest.raises(ValueError, match="not claimable"):
+            board.claim_task(1, owner="alice", role="researcher")
+
+    def test_scan_unclaimed(self):
+        board = TaskBoard()
+        board.add("Task A")
+        board.add("Task B", owner="bob")
+        board.add("Task C", required_role="coder")
+        unclaimed = board.scan_unclaimed()
+        assert len(unclaimed) == 1
+        assert unclaimed[0]["subject"] == "Task A"
+
+    def test_scan_unclaimed_with_role(self):
+        board = TaskBoard()
+        board.add("Task A")
+        board.add("Task B", required_role="coder")
+        unclaimed = board.scan_unclaimed(role="coder")
+        assert len(unclaimed) == 2
+
+    def test_scan_unclaimed_ordered_by_id(self):
+        board = TaskBoard()
+        board.add("Third")
+        board.add("First")
+        board.add("Second")
+        unclaimed = board.scan_unclaimed()
+        assert [t["id"] for t in unclaimed] == [1, 2, 3]
+
+    def test_claim_atomicity(self):
+        """Two threads racing to claim the same task."""
+        board = TaskBoard()
+        board.add("Contested task")
+        results = []
+
+        def claim(name):
+            try:
+                board.claim_task(1, owner=name)
+                results.append((name, True))
+            except ValueError:
+                results.append((name, False))
+
+        t1 = threading.Thread(target=claim, args=("alice",))
+        t2 = threading.Thread(target=claim, args=("bob",))
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        successes = [r for r in results if r[1]]
+        assert len(successes) == 1
+        task = board.get(1)
+        assert task["owner"] in ("alice", "bob")
+
+    def test_claim_event_log(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "tasks.json")
+            board = TaskBoard(persist_path=path)
+            board.add("Task")
+            board.claim_task(1, owner="alice", role="coder", source="auto")
+
+            events_path = os.path.join(tmpdir, "claim_events.jsonl")
+            assert os.path.exists(events_path)
+            with open(events_path) as f:
+                event = json.loads(f.readline())
+            assert event["event"] == "claimed"
+            assert event["task_id"] == 1
+            assert event["owner"] == "alice"
+            assert event["source"] == "auto"
+
+
+class TestIdlePhase:
+    def test_idle_picks_up_inbox_message(self):
+        """During idle phase, inbox message triggers work."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_llm = FakeLLM(response_text="Done.")
+            tm = TeammateManager(
+                llm_client=fake_llm,
+                registry=_make_registry(tmpdir),
+                workspace_root=tmpdir,
+                team_dir=tmpdir,
+            )
+            tm.spawn("worker")
+            tm.send("worker", "Do something")
+
+            deadline = time.time() + 20
+            notifications = []
+            while time.time() < deadline:
+                notifications = tm.drain()
+                if notifications:
+                    break
+                time.sleep(0.5)
+
+            tm.shutdown("worker")
+            assert len(notifications) >= 1
+
+    def test_idle_claims_task_from_board(self):
+        """Idle phase scans task board and claims a task."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_llm = FakeLLM(response_text="Task complete.")
+            board = TaskBoard(persist_path=os.path.join(tmpdir, "tasks.json"))
+            board.add("Autonomous task", description="Do it autonomously")
+
+            tm = TeammateManager(
+                llm_client=fake_llm,
+                registry=_make_registry(tmpdir),
+                workspace_root=tmpdir,
+                team_dir=tmpdir,
+                task_board=board,
+            )
+            tm.spawn("worker", role="assistant")
+
+            deadline = time.time() + 30
+            notifications = []
+            while time.time() < deadline:
+                notifications = tm.drain()
+                if notifications:
+                    break
+                time.sleep(0.5)
+
+            tm.shutdown("worker")
+            assert len(notifications) >= 1
+            assert "auto-claimed" in notifications[0]["message"]
+            task = board.get(1)
+            assert task["owner"] == "worker"
+            assert task["status"] == "in_progress"
+
+    def test_idle_with_nothing_exits_gracefully(self):
+        """Idle phase with no inbox and no task board just waits."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_llm = FakeLLM(response_text="Nothing to do.")
+            tm = TeammateManager(
+                llm_client=fake_llm,
+                registry=_make_registry(tmpdir),
+                workspace_root=tmpdir,
+                team_dir=tmpdir,
+            )
+            tm.spawn("idle_worker")
+            time.sleep(2)
+            tm.shutdown("idle_worker")
+            # Should not crash
+
+
+class TestWorkIdleCycle:
+    def test_full_cycle_inbox_then_task(self):
+        """Teammate processes inbox, then claims task from board."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_llm = FakeLLM(response_text="Completed.")
+            board = TaskBoard(persist_path=os.path.join(tmpdir, "tasks.json"))
+            board.add("Auto task")
+
+            tm = TeammateManager(
+                llm_client=fake_llm,
+                registry=_make_registry(tmpdir),
+                workspace_root=tmpdir,
+                team_dir=tmpdir,
+                task_board=board,
+            )
+            tm.spawn("worker", role="assistant")
+
+            # First: send inbox message
+            tm.send("worker", "Initial task")
+
+            # Collect all notifications — both inbox response and auto-claim
+            # can arrive in the same drain window since WORK falls through
+            # to IDLE in the same loop iteration.
+            deadline = time.time() + 30
+            all_notifs = []
+            while time.time() < deadline:
+                batch = tm.drain()
+                if batch:
+                    all_notifs.extend(batch)
+                    # Check if we got both: at least one normal response
+                    # and at least one auto-claim
+                    has_auto = any("auto-claimed" in n["message"] for n in all_notifs)
+                    if has_auto:
+                        break
+                time.sleep(0.5)
+
+            tm.shutdown("worker")
+            assert len(all_notifs) >= 2
+            assert any("auto-claimed" in n["message"] for n in all_notifs)
+            task = board.get(1)
+            assert task["owner"] == "worker"
+
+
+class TestIdentityReInjection:
+    def test_ensure_identity_adds_system_message(self):
+        """When identity is missing, _ensure_identity prepends it."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tm = TeammateManager(
+                llm_client=FakeLLM(),
+                registry=_make_registry(tmpdir),
+                workspace_root=tmpdir,
+                team_dir=tmpdir,
+            )
+            messages = [{"role": "user", "content": "Hello"}]
+            tm._ensure_identity(messages, "analyst", "research specialist")
+            assert len(messages) == 2
+            assert messages[0]["role"] == "system"
+            assert "analyst" in messages[0]["content"]
+
+    def test_ensure_identity_skips_if_present(self):
+        """When identity already exists, no duplicate is added."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tm = TeammateManager(
+                llm_client=FakeLLM(),
+                registry=_make_registry(tmpdir),
+                workspace_root=tmpdir,
+                team_dir=tmpdir,
+            )
+            messages = [_make_system_message("analyst", "researcher")]
+            original_len = len(messages)
+            tm._ensure_identity(messages, "analyst", "researcher")
+            assert len(messages) == original_len
+
+
+class TestAutonomousClaiming:
+    def test_role_matched_auto_claim(self):
+        """Teammate with matching role auto-claims a role-restricted task."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_llm = FakeLLM(response_text="Refactoring complete.")
+            board = TaskBoard(persist_path=os.path.join(tmpdir, "tasks.json"))
+            board.add("Refactor auth module", required_role="coder")
+
+            tm = TeammateManager(
+                llm_client=fake_llm,
+                registry=_make_registry(tmpdir),
+                workspace_root=tmpdir,
+                team_dir=tmpdir,
+                task_board=board,
+            )
+            tm.spawn("coder_bot", role="coder")
+
+            deadline = time.time() + 30
+            notifications = []
+            while time.time() < deadline:
+                notifications = tm.drain()
+                if notifications:
+                    break
+                time.sleep(0.5)
+
+            tm.shutdown("coder_bot")
+            assert len(notifications) >= 1
+            task = board.get(1)
+            assert task["owner"] == "coder_bot"
+            assert task["status"] == "in_progress"
+            assert task["claim_source"] == "auto"
+
+    def test_role_mismatch_no_claim(self):
+        """Teammate with wrong role does not claim a role-restricted task."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_llm = FakeLLM(response_text="Nothing to do.")
+            board = TaskBoard(persist_path=os.path.join(tmpdir, "tasks.json"))
+            board.add("Coding task", required_role="coder")
+
+            tm = TeammateManager(
+                llm_client=fake_llm,
+                registry=_make_registry(tmpdir),
+                workspace_root=tmpdir,
+                team_dir=tmpdir,
+                task_board=board,
+            )
+            tm.spawn("research_bot", role="researcher")
+
+            time.sleep(8)
+            task = board.get(1)
+            assert task["owner"] == ""
+            assert task["status"] == "pending"
+            tm.shutdown("research_bot")

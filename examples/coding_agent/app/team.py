@@ -37,6 +37,8 @@ _CONFIG_FILE = "config.json"
 _INBOX_DIR = "inbox"
 _MATE_MAX_TURNS = 8
 _MATE_CHECK_INTERVAL = 5  # seconds between inbox checks
+_MATE_IDLE_MAX_CHECKS = 12  # ~60s of idle checks before giving up
+_MATE_IDLE_CHECK_INTERVAL = 5  # seconds between idle phase checks
 _REQUESTS_DIR = "requests"
 
 
@@ -99,6 +101,18 @@ def _read_inbox(team_dir: str, name: str) -> List[Dict]:
         if line:
             messages.append(json.loads(line))
     return messages
+
+
+def _inbox_has_messages(team_dir: str, name: str) -> bool:
+    """Check if a teammate's inbox has messages without consuming them."""
+    path = _inbox_path(team_dir, name)
+    if not os.path.exists(path):
+        return False
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            if line.strip():
+                return True
+    return False
 
 
 # ── Message envelope ──
@@ -227,11 +241,13 @@ class TeammateManager:
         registry: DispatchRegistry,
         workspace_root: str,
         team_dir: Optional[str] = None,
+        task_board=None,
     ):
         self._llm = llm_client
         self._registry = registry
         self._workspace_root = workspace_root
         self._team_dir = team_dir or os.path.join(workspace_root, _TEAM_DIR)
+        self._task_board = task_board
         self._notifications: queue.Queue = queue.Queue()
         self._lock = threading.Lock()
         self._tracker = RequestTracker(self._team_dir)
@@ -265,6 +281,8 @@ class TeammateManager:
             "thread": None,
             "stop_event": stop_event,
             "messages": [_make_system_message(name, role)],
+            "role": role,
+            "phase": "idle",
         }
 
         t = threading.Thread(
@@ -411,49 +429,46 @@ class TeammateManager:
     # ── Teammate loop ──
 
     def _mate_loop(self, name: str, state: Dict):
-        """Daemon loop for a single teammate.
+        """Daemon loop: WORK -> IDLE -> WORK -> ...
 
-        Every _MATE_CHECK_INTERVAL seconds:
-            1. Drain inbox → append to own messages
-            2. If new messages: run Think→Act→Observe
-            3. Put response into notification queue
+        WORK phase: drain inbox, handle protocol + regular messages.
+        IDLE phase: check inbox (priority) then scan task board for
+        claimable tasks. Returns to WORK if work is found.
         """
         stop_event = state["stop_event"]
         messages = state["messages"]
-
-        # Build tool subset for teammate (read-only)
+        role = state.get("role", "assistant")
         mate_tools = self._build_mate_tools()
 
         while not stop_event.is_set():
-            # 1. Drain inbox
+            # ── WORK phase ──
             inbox_msgs = _read_inbox(self._team_dir, name)
-            if not inbox_msgs:
+            if inbox_msgs:
+                protocol_msgs = [env for env in inbox_msgs if env.get("request_id")]
+                regular_msgs = [env for env in inbox_msgs if not env.get("request_id")]
+
+                for env in protocol_msgs:
+                    self._handle_protocol(name, env, state)
+                    if stop_event.is_set():
+                        return
+
+                if regular_msgs:
+                    for env in regular_msgs:
+                        messages.append({"role": "user", "content": env["content"]})
+
+                    self._ensure_identity(messages, name, role)
+                    response = self._run_mate_loop(name, messages, mate_tools)
+
+                    self._notifications.put({
+                        "from": name,
+                        "message": f"[Teammate '{name}' Response]\n{response}",
+                    })
+
+            # ── IDLE phase ──
+            went_to_work = self._idle_phase(name, role, messages, state, mate_tools)
+
+            if not went_to_work:
                 stop_event.wait(_MATE_CHECK_INTERVAL)
-                continue
-
-            # 2. Separate protocol from regular messages
-            protocol_msgs = [env for env in inbox_msgs if env.get("request_id")]
-            regular_msgs = [env for env in inbox_msgs if not env.get("request_id")]
-
-            # 3. Handle protocol messages
-            for env in protocol_msgs:
-                self._handle_protocol(name, env, state)
-                if stop_event.is_set():
-                    return  # shutdown handled — exit loop
-
-            # 4. Handle regular messages with LLM
-            if regular_msgs:
-                for env in regular_msgs:
-                    messages.append({"role": "user", "content": env["content"]})
-
-                response = self._run_mate_loop(name, messages, mate_tools)
-
-                self._notifications.put({
-                    "from": name,
-                    "message": f"[Teammate '{name}' Response]\n{response}",
-                })
-
-            stop_event.wait(_MATE_CHECK_INTERVAL)
 
     def _run_mate_loop(self, name: str, messages: list, mate_tools: Dict) -> str:
         """Run one Think→Act→Observe cycle for a teammate.
@@ -502,6 +517,81 @@ class TeammateManager:
         read_only = {"file_read", "file_list", "file_find", "search_code", "list_files"}
         schemas = self._registry.schemas
         return {name: schemas[name] for name in read_only if name in schemas}
+
+    def _idle_phase(
+        self,
+        name: str,
+        role: str,
+        messages: list,
+        state: Dict,
+        mate_tools: Dict,
+    ) -> bool:
+        """IDLE phase: check inbox (priority) then scan task board.
+
+        Returns True if the teammate transitioned to WORK (claimed a task
+        or received a message), False if idle ended with nothing found.
+        """
+        stop_event = state["stop_event"]
+
+        for _ in range(_MATE_IDLE_MAX_CHECKS):
+            if stop_event.is_set():
+                return False
+
+            # Priority 1: check inbox for new messages (don't consume)
+            if _inbox_has_messages(self._team_dir, name):
+                return True  # Next WORK phase will handle them
+
+            # Priority 2: scan task board for claimable tasks
+            if self._task_board:
+                claimable = self._task_board.scan_unclaimed(role=role)
+                if claimable:
+                    task = claimable[0]
+                    try:
+                        self._task_board.claim_task(
+                            task["id"], owner=name, role=role, source="auto",
+                        )
+                    except ValueError:
+                        # Race condition: another mate claimed it first
+                        stop_event.wait(_MATE_IDLE_CHECK_INTERVAL)
+                        continue
+
+                    task_prompt = (
+                        f"[Auto-assigned Task #{task['id']}]\n"
+                        f"Subject: {task['subject']}\n"
+                        f"Description: {task.get('description', '')}\n"
+                        f"Please complete this task now."
+                    )
+                    self._ensure_identity(messages, name, role)
+                    messages.append({"role": "user", "content": task_prompt})
+                    response = self._run_mate_loop(name, messages, mate_tools)
+                    self._notifications.put({
+                        "from": name,
+                        "message": (
+                            f"[Teammate '{name}' auto-claimed task #{task['id']}]\n"
+                            f"Subject: {task['subject']}\n{response}"
+                        ),
+                    })
+                    return True
+
+            # Nothing found — wait before next idle check
+            stop_event.wait(_MATE_IDLE_CHECK_INTERVAL)
+
+        # Exhausted idle checks without finding work
+        return False
+
+    def _ensure_identity(self, messages: list, name: str, role: str):
+        """Re-inject identity block if missing (after compression/summarization).
+
+        Checks if the first message is a system message with the teammate's
+        identity. If not, prepends one.
+        """
+        identity_marker = f"You are '{name}'"
+        if messages and messages[0].get("role") == "system":
+            content = messages[0].get("content", "")
+            if identity_marker in content:
+                return
+
+        messages.insert(0, _make_system_message(name, role))
 
     def _handle_protocol(self, name: str, envelope: Dict, state: Dict):
         """Process protocol envelopes received by a teammate.
