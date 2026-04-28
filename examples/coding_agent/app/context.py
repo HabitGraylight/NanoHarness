@@ -45,6 +45,8 @@ class ManagedContext(BaseContextManager):
         scratch_dir: str,
         llm_client=None,
         bg_executor=None,
+        scheduler=None,
+        teammate_manager=None,
         spill_threshold: int = _SPILL_THRESHOLD,
         preview_lines: int = _PREVIEW_LINES,
         compress_chars: int = _COMPRESS_CHARS,
@@ -54,6 +56,8 @@ class ManagedContext(BaseContextManager):
         self._scratch_dir = scratch_dir
         self._llm = llm_client
         self._bg = bg_executor
+        self._scheduler = scheduler
+        self._tm = teammate_manager
         self._spill_threshold = spill_threshold
         self._preview_lines = preview_lines
         self._compress_chars = compress_chars
@@ -74,6 +78,20 @@ class ManagedContext(BaseContextManager):
         # Drain background task notifications before returning to the LLM
         if self._bg:
             for notif in self._bg.drain():
+                self._inner.add_message(AgentMessage(
+                    role="system",
+                    content=notif["message"],
+                ))
+        # Drain scheduled task notifications
+        if self._scheduler:
+            for notif in self._scheduler.drain():
+                self._inner.add_message(AgentMessage(
+                    role="system",
+                    content=notif["message"],
+                ))
+        # Drain teammate responses
+        if self._tm:
+            for notif in self._tm.drain():
                 self._inner.add_message(AgentMessage(
                     role="system",
                     content=notif["message"],

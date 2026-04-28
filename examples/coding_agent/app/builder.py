@@ -12,6 +12,7 @@ from app.adapters import OpenAIAdapter
 from app.background import BackgroundExecutor, register_background_tools
 from app.handlers import register_memory_tools
 from app.resilient_llm import ResilientLLM
+from app.scheduler import Scheduler, register_schedule_tools
 from nanoharness.components.state.json_store import JsonStateStore
 from nanoharness.core.base import HookStage
 from nanoharness.core.engine import NanoEngine
@@ -26,6 +27,7 @@ from app.prompt_builder import SystemPromptBuilder
 from app.skills import SkillRegistry, register_skill_tool
 from app.subagent import register_task_tool
 from app.task_system import TaskBoard, register_task_tools
+from app.team import TeammateManager, register_team_tools
 from app.tools import build_tools
 
 # Runtime artifacts go here
@@ -86,15 +88,29 @@ def build_coding_engine(
     # --- Context (three-layer managed: spill → compress → summarize) ---
     scratch_dir = os.path.join(SANDBOX, "scratch")
     bg_executor = BackgroundExecutor(workspace_root, scratch_dir=scratch_dir)
+    scheduler = Scheduler(persist_path=os.path.join(SANDBOX, "schedules.json"))
+    teammate_manager = TeammateManager(
+        llm_client=raw_llm,
+        registry=tools,
+        workspace_root=workspace_root,
+    )
     context = ManagedContext(
         inner=SimpleContextManager(system_prompt=system_prompt),
         scratch_dir=scratch_dir,
         llm_client=raw_llm,
         bg_executor=bg_executor,
+        scheduler=scheduler,
+        teammate_manager=teammate_manager,
     )
 
     # --- Background execution tools ---
     register_background_tools(registry=tools, bg_executor=bg_executor)
+
+    # --- Scheduled task tools ---
+    register_schedule_tools(registry=tools, scheduler=scheduler)
+
+    # --- Team tools ---
+    register_team_tools(registry=tools, tm=teammate_manager)
 
     # --- Wrap LLM with error recovery ---
     def compress_context():
