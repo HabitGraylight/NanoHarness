@@ -1,15 +1,9 @@
-"""Tests for TeammateManager — roster, inbox, spawn, send, shutdown, drain."""
+"""Tests for TeammateManager -- roster, inbox, envelope, spawn, send, shutdown, list, drain, protocol, tools."""
 
-import sys
 import os
-import time
 import tempfile
-import json
 import threading
-
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.dirname(_HERE)
-sys.path.insert(0, _ROOT)
+import time
 
 import pytest
 
@@ -31,7 +25,7 @@ from app.dispatch import DispatchRegistry
 from app.task_system import TaskBoard, is_claimable, is_ready
 
 
-# ── Helpers ──
+# -- Helpers --
 
 
 class FakeLLM:
@@ -91,7 +85,7 @@ def _make_registry(workspace_root="/tmp"):
     return reg
 
 
-# ── Roster ──
+# -- Roster --
 
 
 class TestRoster:
@@ -119,7 +113,7 @@ class TestRoster:
         assert _roster_member(roster, "charlie") is None
 
 
-# ── Inbox ──
+# -- Inbox --
 
 
 class TestInbox:
@@ -152,7 +146,7 @@ class TestInbox:
             assert len(msgs) == 3
 
 
-# ── Envelope ──
+# -- Envelope --
 
 
 class TestEnvelope:
@@ -168,7 +162,7 @@ class TestEnvelope:
         assert env["type"] == "control"
 
 
-# ── TeammateManager CRUD ──
+# -- TeammateManager CRUD --
 
 
 class TestTeammateManagerSpawn:
@@ -305,7 +299,7 @@ class TestTeammateManagerList:
             tm.shutdown("bob")
 
 
-# ── Drain ──
+# -- Drain --
 
 
 class TestDrain:
@@ -336,236 +330,7 @@ class TestDrain:
             assert tm.drain() == []
 
 
-# ── Teammate loop integration ──
-
-
-class TestTeammateLoop:
-    def test_mate_processes_inbox_and_responds(self):
-        """Spawn a teammate, send it a message, wait for response via drain."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            fake_llm = FakeLLM(response_text="I checked the files. All looks good.")
-            tm = TeammateManager(
-                llm_client=fake_llm,
-                registry=_make_registry(),
-                workspace_root=tmpdir,
-                team_dir=tmpdir,
-            )
-            tm.spawn("researcher", role="research specialist")
-
-            # Send a task
-            tm.send("researcher", "Review the auth module")
-
-            # Wait for the mate to process (inbox check interval + LLM call)
-            deadline = time.time() + 15
-            notifications = []
-            while time.time() < deadline:
-                notifications = tm.drain()
-                if notifications:
-                    break
-                time.sleep(0.5)
-
-            tm.shutdown("researcher")
-            assert len(notifications) == 1
-            assert "researcher" in notifications[0]["from"]
-            assert "All looks good" in notifications[0]["message"]
-
-    def test_mate_with_tool_call(self):
-        """Teammate uses a tool then responds."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            fake_llm = FakeLLMWithTools(
-                tool_name="file_read",
-                tool_args={"path": "/tmp/test.txt"},
-                final_response="Found the answer in the file.",
-            )
-            tm = TeammateManager(
-                llm_client=fake_llm,
-                registry=_make_registry(),
-                workspace_root=tmpdir,
-                team_dir=tmpdir,
-            )
-            tm.spawn("analyst")
-
-            tm.send("analyst", "Read the test file")
-
-            deadline = time.time() + 15
-            notifications = []
-            while time.time() < deadline:
-                notifications = tm.drain()
-                if notifications:
-                    break
-                time.sleep(0.5)
-
-            tm.shutdown("analyst")
-            assert len(notifications) == 1
-            assert "Found the answer" in notifications[0]["message"]
-
-    def test_multiple_messages_batched(self):
-        """Send multiple messages — they get batched into one LLM call."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            fake_llm = FakeLLM(response_text="Combined response.")
-            tm = TeammateManager(
-                llm_client=fake_llm,
-                registry=_make_registry(),
-                workspace_root=tmpdir,
-                team_dir=tmpdir,
-            )
-            tm.spawn("worker")
-
-            tm.send("worker", "Task A")
-            tm.send("worker", "Task B")
-
-            deadline = time.time() + 15
-            notifications = []
-            while time.time() < deadline:
-                notifications = tm.drain()
-                if notifications:
-                    break
-                time.sleep(0.5)
-
-            tm.shutdown("worker")
-            assert len(notifications) >= 1
-            # Both messages should be in the conversation
-            last_call = fake_llm.calls[-1]
-            user_contents = [m["content"] for m in last_call["messages"] if m["role"] == "user"]
-            assert "Task A" in user_contents
-            assert "Task B" in user_contents
-
-
-# ── Tool registration ──
-
-
-class TestTeamTools:
-    def test_team_spawn_tool(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tm = TeammateManager(
-                llm_client=FakeLLM(),
-                registry=_make_registry(tmpdir),
-                workspace_root=tmpdir,
-                team_dir=tmpdir,
-            )
-            registry = _make_registry(tmpdir)
-            register_team_tools(registry, tm)
-
-            output = registry.call("team_spawn", {"name": "helper", "role": "assistant"})
-            assert "Spawned teammate 'helper'" in output
-            tm.shutdown("helper")
-
-    def test_team_send_tool(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tm = TeammateManager(
-                llm_client=FakeLLM(),
-                registry=_make_registry(tmpdir),
-                workspace_root=tmpdir,
-                team_dir=tmpdir,
-            )
-            registry = _make_registry(tmpdir)
-            register_team_tools(registry, tm)
-
-            registry.call("team_spawn", {"name": "bob"})
-            output = registry.call("team_send", {"name": "bob", "content": "Do thing"})
-            assert "Sent to 'bob'" in output
-            tm.shutdown("bob")
-
-    def test_team_list_tool(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tm = TeammateManager(
-                llm_client=FakeLLM(),
-                registry=_make_registry(tmpdir),
-                workspace_root=tmpdir,
-                team_dir=tmpdir,
-            )
-            registry = _make_registry(tmpdir)
-            register_team_tools(registry, tm)
-
-            registry.call("team_spawn", {"name": "alice", "role": "researcher"})
-            output = registry.call("team_list", {})
-            assert "alice" in output
-            tm.shutdown("alice")
-
-    def test_team_shutdown_tool(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tm = TeammateManager(
-                llm_client=FakeLLM(),
-                registry=_make_registry(tmpdir),
-                workspace_root=tmpdir,
-                team_dir=tmpdir,
-            )
-            registry = _make_registry(tmpdir)
-            register_team_tools(registry, tm)
-
-            registry.call("team_spawn", {"name": "temp"})
-            output = registry.call("team_shutdown", {"name": "temp"})
-            assert "Shutdown teammate 'temp'" in output
-
-    def test_spawn_empty_name_rejected(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tm = TeammateManager(
-                llm_client=FakeLLM(),
-                registry=_make_registry(tmpdir),
-                workspace_root=tmpdir,
-                team_dir=tmpdir,
-            )
-            registry = _make_registry(tmpdir)
-            register_team_tools(registry, tm)
-
-            with pytest.raises(RuntimeError, match="name is required"):
-                registry.call("team_spawn", {"name": ""})
-
-    def test_send_missing_content_rejected(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tm = TeammateManager(
-                llm_client=FakeLLM(),
-                registry=_make_registry(tmpdir),
-                workspace_root=tmpdir,
-                team_dir=tmpdir,
-            )
-            registry = _make_registry(tmpdir)
-            register_team_tools(registry, tm)
-
-            with pytest.raises(RuntimeError, match="content is required"):
-                registry.call("team_send", {"name": "nobody", "content": ""})
-
-
-# ── ManagedContext integration (will be wired in next task) ──
-
-
-class TestManagedContextIntegration:
-    def test_drain_injects_into_context(self):
-        """Simulate what ManagedContext will do with tm.drain()."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            from app.context import ManagedContext
-            from nanoharness.components.context.simple_context import SimpleContextManager
-            from nanoharness.core.schema import AgentMessage
-
-            fake_llm = FakeLLM(response_text="Done.")
-            tm = TeammateManager(
-                llm_client=fake_llm,
-                registry=_make_registry(),
-                workspace_root=tmpdir,
-                team_dir=tmpdir,
-            )
-            context = ManagedContext(
-                inner=SimpleContextManager(system_prompt="test"),
-                scratch_dir=os.path.join(tmpdir, "scratch"),
-                teammate_manager=tm,  # Not wired yet — will fail if not added
-            )
-
-            tm.spawn("worker")
-            tm.send("worker", "Quick task")
-
-            deadline = time.time() + 15
-            while time.time() < deadline:
-                notifs = tm.drain()
-                if notifs:
-                    break
-                time.sleep(0.5)
-
-            tm.shutdown("worker")
-            # Verify drain produced something
-            assert len(notifs) >= 1
-
-
-# ── RequestTracker ──
+# -- RequestTracker --
 
 
 class TestRequestTracker:
@@ -651,7 +416,7 @@ class TestRequestTracker:
             assert r2["request_id"] == "req_002"
 
 
-# ── Protocol envelope ──
+# -- Protocol envelope --
 
 
 class TestProtocolEnvelope:
@@ -676,7 +441,7 @@ class TestProtocolEnvelope:
         assert env["payload"]["key"] == "val"
 
 
-# ── Graceful shutdown protocol ──
+# -- Graceful shutdown protocol --
 
 
 class TestRequestShutdown:
@@ -724,7 +489,7 @@ class TestRequestShutdown:
                 tm.request_shutdown("ghost")
 
     def test_graceful_shutdown_flow(self):
-        """Full flow: request_shutdown → teammate auto-approves → stops."""
+        """Full flow: request_shutdown -> teammate auto-approves -> stops."""
         with tempfile.TemporaryDirectory() as tmpdir:
             fake_llm = FakeLLM(response_text="Shutting down.")
             tm = TeammateManager(
@@ -758,7 +523,7 @@ class TestRequestShutdown:
             assert req[0]["request_id"] == "req_001"
 
 
-# ── Plan approval protocol ──
+# -- Plan approval protocol --
 
 
 class TestSubmitPlan:
@@ -841,7 +606,7 @@ class TestReviewRequest:
             )
             tm.submit_plan("alice", "Plan")
             tm.review_request("req_001", approve=True)
-            # Already approved — should raise
+            # Already approved -- should raise
             with pytest.raises(ValueError, match="not pending"):
                 tm.review_request("req_001", approve=False)
 
@@ -892,7 +657,7 @@ class TestListRequests:
             assert pending[0]["from"] == "bob"
 
 
-# ── Handle protocol ──
+# -- Handle protocol --
 
 
 class TestHandleProtocol:
@@ -976,7 +741,7 @@ class TestHandleProtocol:
             assert "Need more tests" in state["messages"][0]["content"]
 
 
-# ── Protocol tool registration ──
+# -- Protocol tool registration --
 
 
 class TestProtocolTools:
@@ -1113,11 +878,106 @@ class TestProtocolTools:
                 registry.call("team_review", {"request_id": ""})
 
 
-# ── s17: Autonomous claiming ──
+# -- Tool registration --
+
+
+class TestTeamTools:
+    def test_team_spawn_tool(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tm = TeammateManager(
+                llm_client=FakeLLM(),
+                registry=_make_registry(tmpdir),
+                workspace_root=tmpdir,
+                team_dir=tmpdir,
+            )
+            registry = _make_registry(tmpdir)
+            register_team_tools(registry, tm)
+
+            output = registry.call("team_spawn", {"name": "helper", "role": "assistant"})
+            assert "Spawned teammate 'helper'" in output
+            tm.shutdown("helper")
+
+    def test_team_send_tool(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tm = TeammateManager(
+                llm_client=FakeLLM(),
+                registry=_make_registry(tmpdir),
+                workspace_root=tmpdir,
+                team_dir=tmpdir,
+            )
+            registry = _make_registry(tmpdir)
+            register_team_tools(registry, tm)
+
+            registry.call("team_spawn", {"name": "bob"})
+            output = registry.call("team_send", {"name": "bob", "content": "Do thing"})
+            assert "Sent to 'bob'" in output
+            tm.shutdown("bob")
+
+    def test_team_list_tool(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tm = TeammateManager(
+                llm_client=FakeLLM(),
+                registry=_make_registry(tmpdir),
+                workspace_root=tmpdir,
+                team_dir=tmpdir,
+            )
+            registry = _make_registry(tmpdir)
+            register_team_tools(registry, tm)
+
+            registry.call("team_spawn", {"name": "alice", "role": "researcher"})
+            output = registry.call("team_list", {})
+            assert "alice" in output
+            tm.shutdown("alice")
+
+    def test_team_shutdown_tool(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tm = TeammateManager(
+                llm_client=FakeLLM(),
+                registry=_make_registry(tmpdir),
+                workspace_root=tmpdir,
+                team_dir=tmpdir,
+            )
+            registry = _make_registry(tmpdir)
+            register_team_tools(registry, tm)
+
+            registry.call("team_spawn", {"name": "temp"})
+            output = registry.call("team_shutdown", {"name": "temp"})
+            assert "Shutdown teammate 'temp'" in output
+
+    def test_spawn_empty_name_rejected(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tm = TeammateManager(
+                llm_client=FakeLLM(),
+                registry=_make_registry(tmpdir),
+                workspace_root=tmpdir,
+                team_dir=tmpdir,
+            )
+            registry = _make_registry(tmpdir)
+            register_team_tools(registry, tm)
+
+            with pytest.raises(RuntimeError, match="name is required"):
+                registry.call("team_spawn", {"name": ""})
+
+    def test_send_missing_content_rejected(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tm = TeammateManager(
+                llm_client=FakeLLM(),
+                registry=_make_registry(tmpdir),
+                workspace_root=tmpdir,
+                team_dir=tmpdir,
+            )
+            registry = _make_registry(tmpdir)
+            register_team_tools(registry, tm)
+
+            with pytest.raises(RuntimeError, match="content is required"):
+                registry.call("team_send", {"name": "nobody", "content": ""})
+
+
+# -- Autonomous claiming --
 
 
 class TestTaskBoardClaim:
-    """Tests for claim_task, is_claimable, scan_unclaimed, claim events."""
+    """Tests for claim_task, is_claimable, scan_unclaimed."""
 
     def test_is_claimable_pending_unowned(self):
         board = TaskBoard()
@@ -1213,6 +1073,7 @@ class TestTaskBoardClaim:
 
     def test_claim_atomicity(self):
         """Two threads racing to claim the same task."""
+        import json
         board = TaskBoard()
         board.add("Contested task")
         results = []
@@ -1237,6 +1098,7 @@ class TestTaskBoardClaim:
         assert task["owner"] in ("alice", "bob")
 
     def test_claim_event_log(self):
+        import json
         with tempfile.TemporaryDirectory() as tmpdir:
             path = os.path.join(tmpdir, "tasks.json")
             board = TaskBoard(persist_path=path)
@@ -1253,119 +1115,7 @@ class TestTaskBoardClaim:
             assert event["source"] == "auto"
 
 
-class TestIdlePhase:
-    def test_idle_picks_up_inbox_message(self):
-        """During idle phase, inbox message triggers work."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            fake_llm = FakeLLM(response_text="Done.")
-            tm = TeammateManager(
-                llm_client=fake_llm,
-                registry=_make_registry(tmpdir),
-                workspace_root=tmpdir,
-                team_dir=tmpdir,
-            )
-            tm.spawn("worker")
-            tm.send("worker", "Do something")
-
-            deadline = time.time() + 20
-            notifications = []
-            while time.time() < deadline:
-                notifications = tm.drain()
-                if notifications:
-                    break
-                time.sleep(0.5)
-
-            tm.shutdown("worker")
-            assert len(notifications) >= 1
-
-    def test_idle_claims_task_from_board(self):
-        """Idle phase scans task board and claims a task."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            fake_llm = FakeLLM(response_text="Task complete.")
-            board = TaskBoard(persist_path=os.path.join(tmpdir, "tasks.json"))
-            board.add("Autonomous task", description="Do it autonomously")
-
-            tm = TeammateManager(
-                llm_client=fake_llm,
-                registry=_make_registry(tmpdir),
-                workspace_root=tmpdir,
-                team_dir=tmpdir,
-                task_board=board,
-            )
-            tm.spawn("worker", role="assistant")
-
-            deadline = time.time() + 30
-            notifications = []
-            while time.time() < deadline:
-                notifications = tm.drain()
-                if notifications:
-                    break
-                time.sleep(0.5)
-
-            tm.shutdown("worker")
-            assert len(notifications) >= 1
-            assert "auto-claimed" in notifications[0]["message"]
-            task = board.get(1)
-            assert task["owner"] == "worker"
-            assert task["status"] == "in_progress"
-
-    def test_idle_with_nothing_exits_gracefully(self):
-        """Idle phase with no inbox and no task board just waits."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            fake_llm = FakeLLM(response_text="Nothing to do.")
-            tm = TeammateManager(
-                llm_client=fake_llm,
-                registry=_make_registry(tmpdir),
-                workspace_root=tmpdir,
-                team_dir=tmpdir,
-            )
-            tm.spawn("idle_worker")
-            time.sleep(2)
-            tm.shutdown("idle_worker")
-            # Should not crash
-
-
-class TestWorkIdleCycle:
-    def test_full_cycle_inbox_then_task(self):
-        """Teammate processes inbox, then claims task from board."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            fake_llm = FakeLLM(response_text="Completed.")
-            board = TaskBoard(persist_path=os.path.join(tmpdir, "tasks.json"))
-            board.add("Auto task")
-
-            tm = TeammateManager(
-                llm_client=fake_llm,
-                registry=_make_registry(tmpdir),
-                workspace_root=tmpdir,
-                team_dir=tmpdir,
-                task_board=board,
-            )
-            tm.spawn("worker", role="assistant")
-
-            # First: send inbox message
-            tm.send("worker", "Initial task")
-
-            # Collect all notifications — both inbox response and auto-claim
-            # can arrive in the same drain window since WORK falls through
-            # to IDLE in the same loop iteration.
-            deadline = time.time() + 30
-            all_notifs = []
-            while time.time() < deadline:
-                batch = tm.drain()
-                if batch:
-                    all_notifs.extend(batch)
-                    # Check if we got both: at least one normal response
-                    # and at least one auto-claim
-                    has_auto = any("auto-claimed" in n["message"] for n in all_notifs)
-                    if has_auto:
-                        break
-                time.sleep(0.5)
-
-            tm.shutdown("worker")
-            assert len(all_notifs) >= 2
-            assert any("auto-claimed" in n["message"] for n in all_notifs)
-            task = board.get(1)
-            assert task["owner"] == "worker"
+# -- Identity re-injection --
 
 
 class TestIdentityReInjection:
@@ -1397,58 +1147,3 @@ class TestIdentityReInjection:
             original_len = len(messages)
             tm._ensure_identity(messages, "analyst", "researcher")
             assert len(messages) == original_len
-
-
-class TestAutonomousClaiming:
-    def test_role_matched_auto_claim(self):
-        """Teammate with matching role auto-claims a role-restricted task."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            fake_llm = FakeLLM(response_text="Refactoring complete.")
-            board = TaskBoard(persist_path=os.path.join(tmpdir, "tasks.json"))
-            board.add("Refactor auth module", required_role="coder")
-
-            tm = TeammateManager(
-                llm_client=fake_llm,
-                registry=_make_registry(tmpdir),
-                workspace_root=tmpdir,
-                team_dir=tmpdir,
-                task_board=board,
-            )
-            tm.spawn("coder_bot", role="coder")
-
-            deadline = time.time() + 30
-            notifications = []
-            while time.time() < deadline:
-                notifications = tm.drain()
-                if notifications:
-                    break
-                time.sleep(0.5)
-
-            tm.shutdown("coder_bot")
-            assert len(notifications) >= 1
-            task = board.get(1)
-            assert task["owner"] == "coder_bot"
-            assert task["status"] == "in_progress"
-            assert task["claim_source"] == "auto"
-
-    def test_role_mismatch_no_claim(self):
-        """Teammate with wrong role does not claim a role-restricted task."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            fake_llm = FakeLLM(response_text="Nothing to do.")
-            board = TaskBoard(persist_path=os.path.join(tmpdir, "tasks.json"))
-            board.add("Coding task", required_role="coder")
-
-            tm = TeammateManager(
-                llm_client=fake_llm,
-                registry=_make_registry(tmpdir),
-                workspace_root=tmpdir,
-                team_dir=tmpdir,
-                task_board=board,
-            )
-            tm.spawn("research_bot", role="researcher")
-
-            time.sleep(8)
-            task = board.get(1)
-            assert task["owner"] == ""
-            assert task["status"] == "pending"
-            tm.shutdown("research_bot")

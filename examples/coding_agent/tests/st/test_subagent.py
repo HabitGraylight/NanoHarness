@@ -1,9 +1,6 @@
-"""Tests for the subagent system: context, run loop, task tool."""
+"""ST tests for the subagent system: run loop, fork, task tool."""
 
 import os
-import sys
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
 
@@ -118,47 +115,6 @@ class SummaryOnForce:
                 tool_calls=[ToolCall(name="file_read", arguments={"path": "a.py"})],
             )
         return LLMResponse(content="I found some Python files.", tool_calls=None)
-
-
-# ── SubagentContext tests ──
-
-
-class TestSubagentContext:
-    def test_default_fields(self):
-        ctx = SubagentContext()
-        assert ctx.messages == []
-        assert ctx.tools == {}
-        assert ctx.handlers == {}
-        assert ctx.max_turns == 8
-
-    def test_custom_max_turns(self):
-        ctx = SubagentContext(max_turns=3)
-        assert ctx.max_turns == 3
-
-
-class TestBuildSubagentContext:
-    def test_whitelist_filters_tools(self, tmp_path):
-        reg = _make_registry(tmp_path)
-        ctx = build_subagent_context(reg)
-
-        # Only whitelisted tools should be present
-        assert "file_read" in ctx.tools
-        assert "search_code" in ctx.tools
-        # file_write is NOT in the whitelist
-        assert "file_write" not in ctx.tools
-
-    def test_handlers_are_callable(self, tmp_path):
-        reg = _make_registry(tmp_path)
-        ctx = build_subagent_context(reg)
-        result = ctx.handlers["file_read"]({"path": "test.py"})
-        assert "test.py" in result
-
-    def test_sandbox_applied_in_handlers(self, tmp_path):
-        reg = _make_registry(tmp_path)
-        ctx = build_subagent_context(reg)
-        # Escaping path should return an error string (not raise)
-        result = ctx.handlers["file_read"]({"path": "../../etc/passwd"})
-        assert "Error" in result
 
 
 # ── run_subagent tests ──
@@ -394,16 +350,3 @@ class TestTaskTool:
         reg = _make_registry(tmp_path)
         register_task_tool(registry=reg, llm_client=ImmediateAnswer())
         assert reg._path_params.get("task", []) == []
-
-
-# ── Whitelist correctness ──
-
-
-class TestWhitelist:
-    def test_whitelist_is_read_only(self):
-        """No write tools in the subagent whitelist."""
-        write_tools = {"file_write", "file_edit", "git_commit", "git_push",
-                       "git_reset", "git_revert", "shell_exec", "git_add",
-                       "git_checkout", "git_merge", "git_init", "git_stash",
-                       "git_stash_pop", "git_branch_create"}
-        assert len(SUBAGENT_TOOL_WHITELIST & write_tools) == 0

@@ -1,10 +1,6 @@
 """Tests for the five-segment system prompt builder."""
 
 import os
-import sys
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
 import pytest
 
 from nanoharness.core.prompt import PromptManager
@@ -23,13 +19,13 @@ from app.prompt_builder import (
 
 @pytest.fixture
 def prompts():
-    path = os.path.join(os.path.dirname(__file__), "..", "app", "prompts.yaml")
+    path = os.path.join(os.path.dirname(__file__), "..", "..", "app", "prompts.yaml")
     return PromptManager.from_file(path)
 
 
 @pytest.fixture
 def workspace_root():
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 
 class FakeSkillRegistry:
@@ -138,12 +134,11 @@ def test_builder_produces_single_string(prompts, workspace_root):
     )
     result = builder.build()
     assert isinstance(result, str)
-    # Should contain all segments
-    assert "software engineer" in result.lower()  # segment 1
-    assert "test" in result  # segment 3 (skill name)
-    assert "some memory" in result  # segment 4
-    assert "NanoCA.md" in result  # segment 5 (workspace has NanoCA.md)
-    assert "Environment" in result  # segment 6
+    assert "software engineer" in result.lower()
+    assert "test" in result
+    assert "some memory" in result
+    assert "NanoCA.md" in result
+    assert "Environment" in result
 
 
 def test_builder_dynamic_refresh(prompts, workspace_root):
@@ -169,7 +164,7 @@ def test_builder_no_nano_ca_md(prompts, tmp_path):
         prompts=prompts,
         skill_registry=FakeSkillRegistry(),
         memory=FakeMemory(),
-        workspace_root=str(tmp_path),  # no NanoCA.md here
+        workspace_root=str(tmp_path),
     )
     result = builder.build()
     assert "NanoCA.md" not in result

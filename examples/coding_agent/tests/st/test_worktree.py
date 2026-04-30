@@ -7,9 +7,6 @@ import subprocess
 import tempfile
 import time
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.dirname(_HERE)
-sys.path.insert(0, _ROOT)
 
 import pytest
 

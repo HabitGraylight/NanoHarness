@@ -1,14 +1,11 @@
-"""Smoke tests for the coding agent example.
+"""ST smoke tests for the coding agent example.
 
 Run from examples/coding_agent/:
-    PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
+    PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/st/ -v
 """
 
-import sys
 import os
-
-# Ensure example directory is on sys.path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+import glob
 
 import pytest
 
@@ -18,8 +15,7 @@ from nanoharness.components.hooks.simple_hooks import SimpleHookManager
 from nanoharness.components.state.json_store import JsonStateStore
 from nanoharness.core.engine import NanoEngine
 from nanoharness.core.prompt import PromptManager
-from nanoharness.core.schema import AgentMessage, LLMResponse
-from app.permissions import PermissionLevel
+from nanoharness.core.schema import AgentMessage, LLMResponse, ToolCall
 
 
 class MockLLMClient:
@@ -32,17 +28,43 @@ class MockLLMClient:
         return LLMResponse(content=self._response, tool_calls=None)
 
 
+# ── Helpers ──
+
+
+def _build_test_tools(tmp_path=None):
+    from app.tools import build_tools
+    scripts_dir = os.path.join(os.path.dirname(__file__), "..", "..", "configs", "scripts")
+    workspace = str(tmp_path) if tmp_path else os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..")
+    )
+    return build_tools(scripts_dir=scripts_dir, workspace_root=workspace)
+
+
+def _build_test_perms():
+    from app.permissions import build_permissions
+    return build_permissions()
+
+
+def _make_managed_context(tmp_path, llm=None, **kwargs):
+    from app.context import ManagedContext
+    scratch = str(tmp_path / "scratch")
+    return ManagedContext(
+        inner=SimpleContextManager(system_prompt="System."),
+        scratch_dir=scratch,
+        llm_client=llm,
+        **kwargs,
+    )
+
+
 # ── Component tests ──
 
 
 def test_tools_load():
     """All shell + Python tools register successfully."""
+    workspace = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    scripts_dir = os.path.join(os.path.dirname(__file__), "..", "..", "configs", "scripts")
+    tools = _build_test_tools()
     from app.dispatch import DispatchRegistry
-    from app.tools import build_tools
-
-    workspace = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    scripts_dir = os.path.join(os.path.dirname(__file__), "..", "configs", "scripts")
-    tools = build_tools(scripts_dir=scripts_dir, workspace_root=workspace)
     assert isinstance(tools, DispatchRegistry)
     schemas = tools.get_tool_schemas()
     assert len(schemas) >= 20
@@ -53,48 +75,12 @@ def test_tools_load():
     assert "list_files" in names
 
 
-def test_permissions_policy():
-    """Permission levels match coding agent policy."""
-    from app.permissions import build_permissions
-
-    perms = build_permissions()
-    # Step 1: deny rules
-    assert perms.check("git_reset", {}) == PermissionLevel.DENY
-    assert perms.check("git_revert", {}) == PermissionLevel.DENY
-    # Step 3: allow rules
-    assert perms.check("file_read", {}) == PermissionLevel.ALLOW
-    assert perms.check("git_status", {}) == PermissionLevel.ALLOW
-    # Step 4: ask user (not in deny or allow)
-    assert perms.check("git_push", {}) == PermissionLevel.CONFIRM
-    assert perms.check("shell_exec", {}) == PermissionLevel.CONFIRM
-    assert perms.check("file_edit", {}) == PermissionLevel.CONFIRM
-    assert perms.check("file_write", {}) == PermissionLevel.CONFIRM
-
-
-def test_permissions_enforce():
-    """enforce() returns correct error messages."""
-    from app.permissions import build_permissions
-
-    perms = build_permissions()
-    assert perms.enforce("git_reset", {}) is not None
-    assert "denied" in perms.enforce("git_reset", {}).lower()
-    assert perms.enforce("file_read", {}) is None
-
-
 def test_prompts_load():
     """Coding-agent-specific prompts load from app/prompts.yaml."""
-    prompts_path = os.path.join(os.path.dirname(__file__), "..", "app", "prompts.yaml")
+    prompts_path = os.path.join(os.path.dirname(__file__), "..", "..", "app", "prompts.yaml")
     pm = PromptManager.from_file(prompts_path)
     assert "segment.core_identity" in pm.keys()
     assert "software engineer" in pm.get("segment.core_identity").lower()
-
-
-def test_hooks_build():
-    """Hook manager assembles without error."""
-    from app.hooks import build_hooks
-
-    hooks = build_hooks()
-    hooks.trigger("on_task_start", "test query")
 
 
 # ── Engine assembly tests ──
@@ -122,8 +108,6 @@ def test_engine_runs_with_mock_llm(tmp_path):
 
 def test_engine_with_tool_call(tmp_path):
     """Engine dispatches a tool call and returns observation."""
-    from nanoharness.core.schema import ToolCall
-
     # Create a test file so list_files finds something
     (tmp_path / "hello.py").write_text("pass")
 
@@ -159,7 +143,7 @@ def test_engine_with_tool_call(tmp_path):
 def test_builder_assembles(tmp_path, monkeypatch):
     """build_coding_engine() wires everything correctly."""
     from unittest.mock import patch
-    from app.builder import build_coding_engine, SANDBOX
+    from app.builder import build_coding_engine
 
     mock_llm = MockLLMClient(response="Task complete.")
 
@@ -173,28 +157,7 @@ def test_builder_assembles(tmp_path, monkeypatch):
     assert report["summary"]["total_steps"] >= 1
 
 
-# ── UI test ──
-
-
-def test_ui_banner():
-    """UI module loads and has expected constants."""
-    from app.ui import BANNER, HELP_TEXT
-    assert "Coding Agent" in BANNER
-    assert "/quit" in HELP_TEXT
-
-
 # ── Context management tests (three-layer) ──
-
-
-def _make_managed_context(tmp_path, llm=None, **kwargs):
-    from app.context import ManagedContext
-    scratch = str(tmp_path / "scratch")
-    return ManagedContext(
-        inner=SimpleContextManager(system_prompt="System."),
-        scratch_dir=scratch,
-        llm_client=llm,
-        **kwargs,
-    )
 
 
 def test_context_layer1_spill_large_obs(tmp_path):
@@ -208,7 +171,6 @@ def test_context_layer1_spill_large_obs(tmp_path):
     assert len(msg.content) < len(long_content)
     assert "saved to" in msg.content
     # Scratch file should exist
-    import glob
     spill_files = glob.glob(str(tmp_path / "scratch" / "spill_*.txt"))
     assert len(spill_files) == 1
     assert open(spill_files[0]).read() == long_content
@@ -314,167 +276,3 @@ def test_context_layer3_fallback_without_llm(tmp_path):
     # System prompt survives, messages dropped
     assert ctx._messages[0].role == "system"
     assert len(ctx._messages) < 40
-
-
-def test_goal_verify_achieved():
-    """verify_goal returns True for ACHIEVED response."""
-    from app.context import verify_goal
-
-    class VerifyLLM:
-        def chat(self, messages, tools=None):
-            return LLMResponse(content="ACHIEVED: The file was successfully edited.", tool_calls=None)
-
-    achieved, explanation = verify_goal(
-        VerifyLLM(),
-        "Add a docstring",
-        {"trajectory": [{"status": "terminated", "thought": "Done", "observation": None, "action": None}]}
-    )
-    assert achieved is True
-    assert "file was successfully" in explanation
-
-
-def test_goal_verify_not_achieved():
-    """verify_goal returns False for NOT_ACHIEVED response."""
-    from app.context import verify_goal
-
-    class VerifyLLM:
-        def chat(self, messages, tools=None):
-            return LLMResponse(content="NOT_ACHIEVED: The file was not found.", tool_calls=None)
-
-    achieved, explanation = verify_goal(
-        VerifyLLM(),
-        "Fix the bug",
-        {"trajectory": [{"status": "error", "thought": "Failed", "observation": "Error", "action": None}]}
-    )
-    assert achieved is False
-
-
-# ── Permission gate pipeline tests ──
-
-
-def test_gate_deny_overrides_allow():
-    """Step 1 beats step 3: deny rule takes priority over allow."""
-    from app.permissions import PermissionGate
-
-    gate = PermissionGate()
-    gate.deny("dangerous_tool")
-    gate.allow("dangerous_tool")  # also in allow list
-    assert gate.check("dangerous_tool", {}) == PermissionLevel.DENY
-
-
-def test_gate_deny_glob():
-    """Step 1: glob deny patterns work."""
-    from app.permissions import PermissionGate
-
-    gate = PermissionGate()
-    gate.deny("git_*")
-    assert gate.check("git_reset", {}) == PermissionLevel.DENY
-    assert gate.check("git_push", {}) == PermissionLevel.DENY
-
-
-def test_gate_mode_yolo():
-    """Step 2: yolo mode passes everything not denied."""
-    from app.permissions import PermissionGate, GateMode
-
-    gate = PermissionGate(mode=GateMode.YOLO)
-    gate.deny("git_reset")
-    assert gate.check("git_reset", {}) == PermissionLevel.DENY
-    assert gate.check("file_write", {}) == PermissionLevel.ALLOW
-    assert gate.check("shell_exec", {}) == PermissionLevel.ALLOW
-
-
-def test_gate_mode_auto():
-    """Step 2: auto mode denies unlisted tools."""
-    from app.permissions import PermissionGate, GateMode
-
-    gate = PermissionGate(mode=GateMode.AUTO)
-    gate.allow("file_read")
-    assert gate.check("file_read", {}) == PermissionLevel.ALLOW
-    assert gate.check("shell_exec", {}) == PermissionLevel.DENY  # not in allow
-
-
-def test_gate_mode_interactive():
-    """Step 4: interactive mode asks user for unlisted tools."""
-    from app.permissions import PermissionGate, GateMode
-
-    gate = PermissionGate(mode=GateMode.INTERACTIVE)
-    gate.allow("file_read")
-    assert gate.check("file_read", {}) == PermissionLevel.ALLOW
-    assert gate.check("shell_exec", {}) == PermissionLevel.CONFIRM  # ask user
-
-
-def test_gate_mode_switch():
-    """Mode can be changed at runtime."""
-    from app.permissions import PermissionGate, GateMode
-
-    gate = PermissionGate(mode=GateMode.INTERACTIVE)
-    gate.deny("git_reset")
-    gate.allow("file_read")
-
-    # Interactive: unknown → confirm
-    assert gate.check("shell_exec", {}) == PermissionLevel.CONFIRM
-
-    # Switch to auto: unknown → deny
-    gate.set_mode(GateMode.AUTO)
-    assert gate.check("shell_exec", {}) == PermissionLevel.DENY
-
-    # Switch to yolo: unknown → allow
-    gate.set_mode(GateMode.YOLO)
-    assert gate.check("shell_exec", {}) == PermissionLevel.ALLOW
-
-    # Deny still works in yolo
-    assert gate.check("git_reset", {}) == PermissionLevel.DENY
-
-
-def test_gate_pipeline_order():
-    """Verify the exact 4-step pipeline order."""
-    from app.permissions import PermissionGate, GateMode
-
-    gate = PermissionGate(mode=GateMode.INTERACTIVE)
-    gate.deny("danger_*")
-    gate.allow("safe_*")
-
-    # Step 1: deny matches → reject (even though it also matches allow)
-    gate.allow("danger_special")
-    assert gate.check("danger_special", {}) == PermissionLevel.DENY
-
-    # Step 3: allow matches → pass
-    assert gate.check("safe_read", {}) == PermissionLevel.ALLOW
-
-    # Step 4: no match → ask user
-    assert gate.check("unknown_tool", {}) == PermissionLevel.CONFIRM
-
-
-def test_gate_approval_callback():
-    """enforce() uses approval_callback for step 4."""
-    from app.permissions import PermissionGate
-
-    answers = {"shell_exec": True, "file_write": False}
-
-    def callback(tool_name, args):
-        return answers.get(tool_name, False)
-
-    gate = PermissionGate(approval_callback=callback)
-    assert gate.enforce("shell_exec", {}) is None      # approved
-    assert gate.enforce("file_write", {}) is not None   # rejected
-    assert gate.enforce("git_reset", {}) is not None    # denied (no deny rule, but no allow → confirm → callback says no)
-
-    gate.deny("never")
-    assert "denied" in gate.enforce("never", {})
-
-
-# ── Helpers ──
-
-
-def _build_test_tools(tmp_path=None):
-    from app.tools import build_tools
-    scripts_dir = os.path.join(os.path.dirname(__file__), "..", "configs", "scripts")
-    workspace = str(tmp_path) if tmp_path else os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..")
-    )
-    return build_tools(scripts_dir=scripts_dir, workspace_root=workspace)
-
-
-def _build_test_perms():
-    from app.permissions import build_permissions
-    return build_permissions()

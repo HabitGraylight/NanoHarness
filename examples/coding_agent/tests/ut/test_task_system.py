@@ -1,20 +1,15 @@
 """Tests for TaskBoard — CRUD, status transitions, dependencies, is_ready, persistence."""
 
-import sys
-import os
 import json
+import os
 import tempfile
-
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.dirname(_HERE)
-sys.path.insert(0, _ROOT)
 
 import pytest
 
 from app.task_system import TaskBoard, TaskStatus, is_ready, make_task
 
 
-# ── TaskRecord & is_ready ──
+# -- TaskRecord & is_ready --
 
 
 class TestIsReady:
@@ -39,7 +34,7 @@ class TestIsReady:
         assert is_ready(task) is False
 
 
-# ── CRUD ──
+# -- CRUD --
 
 
 class TestAdd:
@@ -102,7 +97,7 @@ class TestUpdate:
             board.update(99, subject="nope")
 
 
-# ── Status transitions ──
+# -- Status transitions --
 
 
 class TestStart:
@@ -166,7 +161,7 @@ class TestDelete:
         assert board.get(1) is not None
 
 
-# ── Dependencies ──
+# -- Dependencies --
 
 
 class TestDependencies:
@@ -242,7 +237,7 @@ class TestDependencies:
             board.update(1, add_blocked_by=[99])
 
 
-# ── Listing & filtering ──
+# -- Listing & filtering --
 
 
 class TestListFilter:
@@ -274,7 +269,7 @@ class TestListFilter:
         assert board.list() == []
 
 
-# ── Persistence ──
+# -- Persistence --
 
 
 class TestPersistence:
@@ -298,11 +293,11 @@ class TestPersistence:
     def test_no_persist_path(self):
         board = TaskBoard()
         board.add("Task")
-        # No file created — no error
+        # No file created -- no error
         assert board.get(1) is not None
 
 
-# ── Summary ──
+# -- Summary --
 
 
 class TestSummary:
