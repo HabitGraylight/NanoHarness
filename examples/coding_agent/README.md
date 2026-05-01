@@ -7,7 +7,7 @@ A self-contained coding agent built on NanoHarness, with a terminal UI.
 ```bash
 # 1. Install dependencies (from repo root)
 cd ../../..
-pip install -e ".[openai]"
+pip install -e ".[openai,mcp]"
 
 # 2. Set your API key
 export DEEPSEEK_API_KEY="sk-..."
@@ -74,56 +74,124 @@ Features: colored output, readline support (arrow keys, history), persistent inp
 
 ```
 coding_agent/
-├── main.py              # Entry point (REPL + single-shot)
-├── app/                 # App layer — all coding-agent-specific logic
-│   ├── builder.py       #   Engine assembly + memory lifecycle hooks
-│   ├── hooks.py         #   Colored terminal output hooks
-│   ├── ui.py            #   REPL loop + readline + history
-│   ├── tools.py         #   Script tools + Python-native search/list
-│   ├── permissions.py   #   Permission policy (deny reset, confirm push)
-│   └── prompts.yaml     #   Coding-agent system prompt
-├── nanoharness/         # Symlink → ../../nanoharness (shared kernel)
-├── configs/             # Runtime resources (shell scripts, MCP config)
-├── sandbox/             # Runtime artifacts (memory.json, run_state.json, .history)
-├── tests/               # Smoke tests (9 tests)
-└── README.md            # This file
+├── main.py                # Entry point (REPL + single-shot)
+├── NanoCA.md              # Project instructions loaded into system prompt
+├── app/                   # App layer — all coding-agent-specific logic
+│   ├── adapters.py        #   OpenAI-compatible LLM adapter
+│   ├── background.py      #   Background task executor (thread pool)
+│   ├── builder.py         #   Engine assembly — wires all components
+│   ├── context.py         #   Three-layer context: spill → compress → summarize
+│   ├── dispatch.py        #   Tool registry with path sandboxing
+│   ├── handlers.py        #   Script + Python tool registration
+│   ├── hooks.py           #   Lifecycle hooks + tool interception (BLOCK/INJECT)
+│   ├── mcp.py             #   MCP client — external tool servers via stdio JSON-RPC
+│   ├── memory.py          #   File-based memory (.memory/ directory)
+│   ├── permissions.py     #   4-step permission pipeline (deny/mode/allow/ask)
+│   ├── prompt_builder.py  #   Five-segment system prompt builder
+│   ├── resilient_llm.py   #   LLM wrapper: continuation, context compression, retry
+│   ├── scheduler.py       #   Cron-based scheduled tasks (recurring + one-shot)
+│   ├── skills.py          #   Markdown skill discovery and loading
+│   ├── subagent.py        #   Subagent delegation with read-only tool subset
+│   ├── task_system.py     #   Task board with dependency chains + worktree binding
+│   ├── team.py            #   Long-lived teammate system (daemon threads)
+│   ├── tools.py           #   Top-level tool assembly
+│   ├── ui.py              #   REPL loop + readline + history
+│   ├── worktree.py        #   Git worktree task isolation
+│   └── prompts.yaml       #   Coding-agent prompt templates
+├── configs/               # Runtime configuration
+│   ├── mcp_servers.json   #   MCP server discovery config
+│   └── scripts/           #   28 shell script tools (*.sh)
+├── skills/                #   Markdown skill definitions
+│   ├── code-review.md
+│   ├── debugging.md
+│   ├── refactoring.md
+│   └── test-writing.md
+├── sandbox/               # Runtime artifacts (gitignored)
+├── nanoharness/           # Symlink → ../../nanoharness (shared kernel)
+└── tests/                 # Test suite
+    ├── conftest.py        #   Shared fixtures + path setup
+    ├── ut/                #   Unit tests (14 files, 272 tests)
+    └── st/                #   System/integration tests (11 files, 143 tests)
 ```
+
+## Architecture
+
+The coding agent follows the NanoHarness **H = (E, T, C, S, L, V)** model. The kernel provides only the six governance components — everything else is in `app/`.
+
+```
+NanoEngine
+  ├── E (Execution)      — Think→Act→Observe loop (kernel)
+  ├── T (Tools)          — DispatchRegistry with 40+ tools (app)
+  ├── C (Context)         — ManagedContext: spill/compress/summarize (app)
+  ├── S (State)           — JsonStateStore (kernel)
+  ├── L (Hooks)           — SimpleHookManager + ToolHookRunner (app)
+  └── V (Evaluation)      — TraceEvaluator (kernel)
+```
+
+Key subsystems (all app-layer, no kernel changes):
+
+| Subsystem | Module | Purpose |
+|---|---|---|
+| **Memory** | `memory.py` | File-based `.memory/` directory, YAML frontmatter, keyword search |
+| **Tasks** | `task_system.py` | Task board with dependency chains, status transitions, JSON persistence |
+| **Worktrees** | `worktree.py` | Git worktree per task — isolated execution lanes |
+| **Team** | `team.py` | Spawn teammates with independent Think-Act-Observe loops |
+| **Scheduler** | `scheduler.py` | Cron-based recurring + one-shot scheduled tasks |
+| **Background** | `background.py` | Run slow commands in background threads |
+| **Subagent** | `subagent.py` | Delegate focused subtasks with read-only tool subset |
+| **MCP** | `mcp.py` | External tool servers via Model Context Protocol (stdio JSON-RPC) |
+| **Skills** | `skills.py` | Markdown skill files with YAML frontmatter |
+| **Context** | `context.py` | Three-layer: spill large results → compress old → summarize when long |
+| **Resilient LLM** | `resilient_llm.py` | Continuation, context compression, exponential backoff |
 
 ## Available Tools
 
-31 tools registered:
+40+ tools registered across native scripts, Python, task system, worktree, MCP, and skills:
 
-| Tool | Source | Description |
-|---|---|---|
-| `file_read` | script | Read file contents (with line range) |
-| `file_write` | script | Create or overwrite a file |
-| `file_edit` | script | Replace text fragment in a file |
-| `file_list` | script | List directory contents |
-| `file_find` | script | Find files by name pattern |
-| `git_status` | script | Show working tree status |
-| `git_diff` | script | Show unstaged/staged changes |
-| `git_log` | script | Show commit history |
-| `git_add` | script | Stage files |
-| `git_commit` | script | Create a commit |
-| `git_push` | script | Push to remote |
-| `git_branch_*` | script | Branch operations |
-| `git_stash*` | script | Stash operations |
-| `git_show` | script | Show commit details |
-| `git_remote_list` | script | List remotes |
-| `git_merge` | script | Merge a branch |
-| `git_pull` | script | Pull from remote |
-| `shell_exec` | script | Run arbitrary shell commands |
-| `sys_info` | script | System information |
-| `you_search` | script | Web search via you.com Search API |
-| `search_code` | python | Regex grep in source files |
-| `list_files` | python | List files by glob pattern |
-| `memory_store` | python | Store info for cross-session recall |
-| `memory_recall` | python | Recall stored memories by keyword |
+| Category | Tools |
+|---|---|
+| **File ops** | `file_read`, `file_write`, `file_edit`, `file_list`, `file_find` |
+| **Git ops** | `git_status`, `git_diff`, `git_log`, `git_add`, `git_commit`, `git_push`, `git_branch_*`, `git_stash*`, `git_show`, `git_remote_list`, `git_merge`, `git_pull` |
+| **Shell** | `shell_exec`, `sys_info`, `you_search` |
+| **Search** | `search_code`, `list_files` |
+| **Memory** | `save_memory`, `recall_memory`, `list_memories` |
+| **Tasks** | `task_create`, `task_list`, `task_update`, `task_complete` |
+| **Worktree** | `worktree_create`, `worktree_enter`, `worktree_run`, `worktree_closeout`, `worktree_list` |
+| **Background** | `bg_run`, `bg_poll`, `bg_drain` |
+| **Scheduler** | `schedule_create`, `schedule_pause`, `schedule_resume`, `schedule_delete`, `schedule_list` |
+| **Team** | `team_spawn`, `team_send`, `team_list`, `team_shutdown` |
+| **Subagent** | `task` (delegates subtask with read-only tools) |
+| **Skills** | `skill` (discover and load markdown skills) |
+| **MCP** | `mcp__{server}__{tool}` (dynamically registered from external servers) |
 
 ## Permission Model
+
+4-step pipeline: deny → mode check → allow → user confirmation.
 
 | Level | Tools | Behavior |
 |---|---|---|
 | DENY | `git_reset`, `git_revert` | Blocked outright |
-| CONFIRM | `git_push`, `git_commit`, `file_write`, `shell_exec` | User approval required |
-| ALLOW | Everything else | Executes immediately |
+| ALLOW | `file_read`, `search_code`, `git_status`, `memory_*`, `task`, `skill`, `mcp__filesystem__*` | Executes immediately |
+| CONFIRM | `file_write`, `file_edit`, `shell_exec`, `git_commit`, `git_push` | User approval required |
+
+Modes: `interactive` (default, asks user), `auto` (deny unknown), `yolo` (allow all not denied).
+
+## Testing
+
+```bash
+# From examples/coding_agent/
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ut/ -v    # Unit tests (272)
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/st/ -v    # Integration tests (143)
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v       # All (415)
+```
+
+| Layer | Files | Tests | What's tested |
+|---|---|---|---|
+| **UT** | 14 | 272 | Pure logic: sandbox, permissions, cron matching, task CRUD, memory I/O, adapter protocol |
+| **ST** | 11 | 143 | Real OS: git worktrees, subprocess MCP, threading, full engine wiring |
+
+UT = no subprocess, no threading, no `time.sleep`. ST = real OS operations, multi-component integration.
+
+## Acknowledgments
+
+This project draws inspiration from [learn-claude-code](https://github.com/shareAI-lab/learn-claude-code). Thanks very much.
