@@ -4,8 +4,10 @@ from typing import Any, Dict, List, Optional, Protocol
 
 from nanoharness.core.schema import (
     AgentMessage,
+    EvaluationResult,
     LLMResponse,
     StepResult,
+    StopSignal,
 )
 
 
@@ -69,6 +71,27 @@ class BaseEvaluator(BaseComponent):
     @abc.abstractmethod
     def get_report(self) -> Dict:
         pass
+
+    def should_stop(self, trajectory: List[StepResult]) -> StopSignal:
+        """Mid-loop evaluation: should the engine stop early?
+
+        Default never stops. Override in app-layer evaluators to
+        detect spinning, error loops, stagnation, etc.
+        """
+        return StopSignal()
+
+    def evaluate_success(self, query: str, trajectory: List[StepResult]) -> EvaluationResult:
+        """Post-loop evaluation: did the agent achieve the task?
+
+        Default uses legacy logic: any terminated step = achieved.
+        Override in app-layer evaluators for real verification.
+        """
+        achieved = any(s.status == "terminated" for s in trajectory)
+        return EvaluationResult(
+            achieved=achieved,
+            confidence=1.0 if achieved else 0.0,
+            explanation="Legacy: terminated step found" if achieved else "No terminated step",
+        )
 
 
 class BaseHookManager(BaseComponent):

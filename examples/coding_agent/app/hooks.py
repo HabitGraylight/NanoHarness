@@ -143,10 +143,20 @@ def _on_step_end(step_result):
 def _on_task_end(report):
     summary = report.get("summary", {})
     steps = summary.get("total_steps", "?")
-    success = summary.get("summary", {}).get("success", False)
+    success = summary.get("success", False)
     status = f"{_GREEN}Success{_RESET}" if success else f"{_RED}Failed{_RESET}"
+
+    # Show evaluation result if available
+    evaluation = summary.get("evaluation", {})
+    eval_status = ""
+    if evaluation:
+        eval_achieved = evaluation.get("achieved", False)
+        eval_status = f" | Verified: {'Yes' if eval_achieved else 'No'}"
+
     print(f"{_BOLD}{'━' * 60}{_RESET}")
-    print(f"  {_BOLD}Done.{_RESET} Steps: {steps} | {status}")
+    print(f"  {_BOLD}Done.{_RESET} Steps: {steps} | {status}{eval_status}")
+    if summary.get("stop_reason"):
+        print(f"  {_YELLOW}Stop reason:{_RESET} {summary['stop_reason']}")
     print(f"{_BOLD}{'━' * 60}{_RESET}")
 
 

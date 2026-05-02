@@ -7,9 +7,9 @@ The kernel is policy-free — all behavior lives in this app layer.
 import os
 
 from nanoharness.components.context.simple_context import SimpleContextManager
-from nanoharness.components.evaluator.trace_evaluator import TraceEvaluator
 from app.adapters import OpenAIAdapter
 from app.background import BackgroundExecutor, register_background_tools
+from app.coding_evaluator import CodingAgentEvaluator
 from app.handlers import register_memory_tools
 from app.resilient_llm import ResilientLLM
 from app.scheduler import Scheduler, register_schedule_tools
@@ -156,7 +156,7 @@ def build_coding_engine(
         context=context,
         state=JsonStateStore(os.path.join(SANDBOX, "run_state.json")),
         hooks=hooks,
-        evaluator=TraceEvaluator(),
+        evaluator=CodingAgentEvaluator(llm_client=raw_llm),
         permissions=perms,
         tool_hooks=tool_hooks,
         max_steps=max_steps,

@@ -9,7 +9,7 @@ from nanoharness.core.base import (
     HookStage,
     LLMProtocol,
 )
-from nanoharness.core.schema import AgentMessage, StepResult
+from nanoharness.core.schema import AgentMessage, StepResult, StopSignal
 
 
 class NanoEngine:
@@ -50,12 +50,21 @@ class NanoEngine:
         self.hooks.trigger(HookStage.ON_TASK_START, user_query)
         self.context.add_message(AgentMessage(role="user", content=user_query))
 
+        trajectory: list = []
+
         for i in range(self.max_steps):
             step_res = self._execute_step(i)
 
             self.state.save_state({"current_step": i, "status": step_res.status})
             self.evaluator.log_step(step_res)
+            trajectory.append(step_res)
             self.hooks.trigger(HookStage.ON_STEP_END, step_res)
+
+            # Mid-loop evaluation: should we stop early?
+            stop_signal = self.evaluator.should_stop(trajectory)
+            if stop_signal.should_stop:
+                step_res.stop_signal = stop_signal
+                break
 
             if step_res.status == "terminated":
                 break

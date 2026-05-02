@@ -1,4 +1,4 @@
-from nanoharness.core.schema import AgentMessage, LLMResponse, StepResult, ToolCall
+from nanoharness.core.schema import AgentMessage, EvaluationResult, LLMResponse, StepResult, StopSignal, ToolCall
 
 
 class TestToolCall:
@@ -48,3 +48,39 @@ class TestStepResult:
     def test_custom_status(self):
         s = StepResult(step_id=1, thought="", status="error")
         assert s.status == "error"
+
+    def test_stop_signal_field(self):
+        s = StepResult(step_id=0, thought="t")
+        assert s.stop_signal is None
+
+    def test_with_stop_signal(self):
+        sig = StopSignal(should_stop=True, reason="spinning", stop_category="error_loop")
+        s = StepResult(step_id=0, thought="t", stop_signal=sig)
+        assert s.stop_signal.should_stop is True
+
+
+class TestStopSignal:
+    def test_defaults(self):
+        s = StopSignal()
+        assert s.should_stop is False
+        assert s.reason == ""
+        assert s.stop_category == ""
+
+    def test_custom(self):
+        s = StopSignal(should_stop=True, reason="3 consecutive errors", stop_category="error_loop")
+        assert s.should_stop is True
+        assert "3 consecutive" in s.reason
+
+
+class TestEvaluationResult:
+    def test_defaults(self):
+        r = EvaluationResult()
+        assert r.achieved is False
+        assert r.confidence == 0.0
+        assert r.explanation == ""
+        assert r.evidence == []
+
+    def test_custom(self):
+        r = EvaluationResult(achieved=True, confidence=0.9, explanation="Done", evidence=["obs1"])
+        assert r.achieved is True
+        assert len(r.evidence) == 1

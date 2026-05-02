@@ -3,8 +3,9 @@ from nanoharness.components.evaluator.trace_evaluator import TraceEvaluator
 from nanoharness.components.hooks.simple_hooks import SimpleHookManager
 from nanoharness.components.state.json_store import JsonStateStore
 from nanoharness.components.tools.dict_registry import DictToolRegistry
+from nanoharness.core.base import BaseEvaluator
 from nanoharness.core.engine import NanoEngine
-from nanoharness.core.schema import LLMResponse, ToolCall
+from nanoharness.core.schema import LLMResponse, StepResult, StopSignal, ToolCall
 
 
 class TestEngineBasicLoop:
@@ -116,3 +117,76 @@ class TestEngineContext:
         assert msgs[0]["role"] == "system"
         assert msgs[1]["role"] == "user"
         assert msgs[2]["role"] == "assistant"
+
+
+class TestEngineMidLoopStop:
+    def test_mid_loop_stop(self, mock_llm):
+        """Engine stops when evaluator.should_stop returns True."""
+
+        class StoppingEvaluator(BaseEvaluator):
+            def __init__(self):
+                self.trajectory = []
+
+            def log_step(self, step):
+                self.trajectory.append(step)
+
+            def get_report(self):
+                return {"summary": {"total_steps": len(self.trajectory), "success": False}, "trajectory": []}
+
+            def should_stop(self, trajectory):
+                if len(trajectory) >= 2:
+                    return StopSignal(should_stop=True, reason="test stop", stop_category="test")
+                return StopSignal()
+
+            def reset(self):
+                self.trajectory = []
+
+        reg = DictToolRegistry()
+
+        @reg.tool
+        def echo(text: str):
+            """Echo."""
+            return text
+
+        llm = mock_llm([
+            LLMResponse(content="step1", tool_calls=[ToolCall(name="echo", arguments={"text": "a"})]),
+            LLMResponse(content="step2", tool_calls=[ToolCall(name="echo", arguments={"text": "b"})]),
+            LLMResponse(content="done"),
+        ])
+        engine = NanoEngine(
+            llm_client=llm,
+            tools=reg,
+            context=SimpleContextManager(),
+            state=JsonStateStore("/tmp/test_mid_stop.json"),
+            hooks=SimpleHookManager(),
+            evaluator=StoppingEvaluator(),
+            max_steps=10,
+        )
+        report = engine.run("test")
+        assert report["summary"]["total_steps"] == 2
+
+    def test_default_evaluator_no_stop(self, mock_llm):
+        """Default TraceEvaluator never triggers early stop."""
+        reg = DictToolRegistry()
+
+        @reg.tool
+        def noop():
+            """No-op."""
+            return "ok"
+
+        llm = mock_llm([
+            LLMResponse(content="step1", tool_calls=[ToolCall(name="noop", arguments={})]),
+            LLMResponse(content="step2", tool_calls=[ToolCall(name="noop", arguments={})]),
+            LLMResponse(content="done"),
+        ])
+        engine = NanoEngine(
+            llm_client=llm,
+            tools=reg,
+            context=SimpleContextManager(),
+            state=JsonStateStore("/tmp/test_no_stop.json"),
+            hooks=SimpleHookManager(),
+            evaluator=TraceEvaluator(),
+            max_steps=3,
+        )
+        report = engine.run("test")
+        assert report["summary"]["total_steps"] == 3

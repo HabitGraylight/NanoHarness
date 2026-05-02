@@ -20,6 +20,21 @@ class AgentMessage(BaseModel):
     tool_calls: Optional[List[ToolCall]] = None
 
 
+class StopSignal(BaseModel):
+    """Mid-loop evaluation: should the engine stop early?"""
+    should_stop: bool = False
+    reason: str = ""
+    stop_category: str = ""  # "error_loop" | "spinning" | "stagnation" | ""
+
+
+class EvaluationResult(BaseModel):
+    """Post-loop evaluation: did the agent achieve the task?"""
+    achieved: bool = False
+    confidence: float = 0.0
+    explanation: str = ""
+    evidence: List[str] = []
+
+
 class StepResult(BaseModel):
     """单步执行的结果记录"""
     step_id: int
@@ -27,3 +42,4 @@ class StepResult(BaseModel):
     action: Optional[Dict] = None
     observation: Optional[str] = None
     status: str = "success"  # success, error, terminated
+    stop_signal: Optional[StopSignal] = None

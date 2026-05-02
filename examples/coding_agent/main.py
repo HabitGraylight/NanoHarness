@@ -19,7 +19,6 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)
 
 from app.builder import build_coding_engine
-from app.context import verify_goal
 from app.ui import BANNER, read_input
 
 _BOLD = "\033[1m"
@@ -66,18 +65,13 @@ def run_repl(engine):
 
 
 def _print_goal_verification(engine, query, report):
-    """Run goal verification and print the result."""
-    # Only verify if the run terminated normally
-    steps = report.get("trajectory", [])
-    if not steps or steps[-1].get("status") != "terminated":
-        print(f"  {_YELLOW}Run did not complete normally — skipping goal check.{_RESET}")
+    """Print goal verification from the evaluator's result."""
+    evaluation = report.get("summary", {}).get("evaluation", {})
+    if not evaluation:
         return
 
-    try:
-        achieved, explanation = verify_goal(engine.llm, query, report)
-    except Exception:
-        # Verification failure should not break the REPL
-        return
+    achieved = evaluation.get("achieved", False)
+    explanation = evaluation.get("explanation", "")
 
     if achieved:
         print(f"  {_GREEN}Goal achieved:{_RESET} {_DIM}{explanation.split(':', 1)[-1].strip()}{_RESET}")

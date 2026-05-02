@@ -1,5 +1,5 @@
 from nanoharness.components.evaluator.trace_evaluator import TraceEvaluator
-from nanoharness.core.schema import StepResult
+from nanoharness.core.schema import StepResult, StopSignal, EvaluationResult
 
 
 class TestTraceEvaluator:
@@ -37,3 +37,26 @@ class TestTraceEvaluator:
         ev.log_step(StepResult(step_id=0, thought="x", status="terminated"))
         ev.reset()
         assert ev.get_report()["summary"]["total_steps"] == 0
+
+    def test_default_should_stop(self):
+        ev = TraceEvaluator()
+        ev.log_step(StepResult(step_id=0, thought="t", status="success"))
+        ev.log_step(StepResult(step_id=1, thought="t", status="error"))
+        signal = ev.should_stop(ev.trajectory)
+        assert signal.should_stop is False
+
+    def test_default_evaluate_success(self):
+        ev = TraceEvaluator()
+        ev.log_step(StepResult(step_id=0, thought="t", status="terminated"))
+        result = ev.evaluate_success("test query", ev.trajectory)
+        assert result.achieved is True
+        assert result.confidence == 1.0
+
+    def test_report_contains_evaluation(self):
+        ev = TraceEvaluator()
+        ev.log_step(StepResult(step_id=0, thought="done", status="terminated"))
+        report = ev.get_report()
+        assert "evaluation" in report["summary"]
+        assert report["summary"]["evaluation"]["achieved"] is True
+        assert "stop_reason" in report["summary"]
+        assert report["summary"]["stop_reason"] == ""
