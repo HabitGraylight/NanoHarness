@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-63%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-508%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -30,7 +30,7 @@ NanoHarness is a minimal Python framework for building tool-augmented LLM agents
 | **C** | Context Manager | Context window composition and compaction |
 | **S** | State Store | Cross-turn persistence and crash recovery |
 | **L** | Lifecycle Hooks | Cross-cutting instrumentation: logging, policy, auth |
-| **V** | Evaluation | Step-level trajectory recording and outcome reporting |
+| **V** | Evaluation | Trajectory recording, mid-loop early-stop detection, independent goal verification |
 
 The kernel provides **only** these six interfaces and one orchestration engine. Everything else — which LLM to call, how to manage memory, whether to enforce permissions — is determined by the application.
 
@@ -46,11 +46,13 @@ The kernel provides **only** these six interfaces and one orchestration engine. 
 │   │  E: NanoEngine                                          │  │
 │   │                                                         │  │
 │   │    ON_START ──► Think ──► Act ──► Observe ──► ON_STEP   │  │
-│   │                    │         │          │                │  │
-│   │                    ▼         ▼          ▼                │  │
+│   │                    │         │          │       │        │  │
+│   │                    ▼         ▼          ▼       ▼        │  │
 │   │               LLMProtocol  T: Tools  C: Context         │  │
+│   │                                              V: Eval    │  │
+│   │                                    should_stop? ──► STOP │  │
 │   │                                                         │  │
-│   │    ON_END ◄── V: Report ◄── S: State ◄────────────────  │  │
+│   │    ON_END ◄── V: Report + evaluate_success              │  │
 │   └─────────────────────────────────────────────────────────┘  │
 │                                                                 │
 │   Interfaces:  BaseToolRegistry  BaseContextManager             │
@@ -80,23 +82,23 @@ The kernel provides **only** these six interfaces and one orchestration engine. 
 ```
 nanoharness/
   core/                  # Kernel: interfaces + engine
-    schema.py            #   ToolCall, LLMResponse, AgentMessage, StepResult
+    schema.py            #   ToolCall, LLMResponse, AgentMessage, StepResult, StopSignal, EvaluationResult
     base.py              #   ETCSLV ABCs, LLMProtocol, HookStage
-    engine.py            #   NanoEngine
+    engine.py            #   NanoEngine (with mid-loop evaluation)
     prompt.py            #   PromptManager (YAML template loader)
   components/            # Minimal ETCSLV implementations
     tools/               #   T: DictToolRegistry, ScriptToolRegistry
     context/             #   C: SimpleContextManager
     state/               #   S: JsonStateStore
     hooks/               #   L: SimpleHookManager
-    evaluator/           #   V: TraceEvaluator
+    evaluator/           #   V: TraceEvaluator (with should_stop + evaluate_success)
   utils/                 # get_logger, count_tokens
 configs/
   prompts.yaml           # Prompt templates
-  scripts/               # Shell-script tools (auto-discovered, 26 tools)
+  scripts/               # Shell-script tools (auto-discovered, 27 tools)
 examples/
-  coding_agent/          # Full-featured coding agent reference
-tests/                   # 63 tests
+  coding_agent/          # Full-featured coding agent reference (434 tests)
+tests/                   # 74 kernel tests
 ```
 
 ---
@@ -140,9 +142,10 @@ NanoEngine.run(query)
           │
           ├─ S.save_state()
           ├─ V.log_step()
+          ├─ V.should_stop()?  ──► early break if stuck/spinning
           └─ L.trigger(ON_STEP_END)
 
-     ├─ V.get_report()
+     ├─ V.get_report()        (includes evaluate_success verdict)
      └─ L.trigger(ON_TASK_END)
 ```
 
@@ -176,17 +179,22 @@ def chat(self, messages, tools=None) -> LLMResponse: ...
 
 **Custom components** — subclass any `Base*` ABC and inject into `NanoEngine`.
 
-See `examples/coding_agent/` for a reference that wires together a custom LLM adapter, memory strategy, permission pipeline, subagent delegation, and skill loading — all built on top of the kernel without modifying it.
+See `examples/coding_agent/` for a reference that wires together a custom LLM adapter, memory strategy, permission pipeline, subagent delegation, skill loading, and evaluation — all built on top of the kernel without modifying it.
 
 ---
 
 ## Testing
 
 ```bash
+# Kernel tests (74)
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
+
+# Coding agent tests (434: 291 UT + 143 ST)
+cd examples/coding_agent
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-63 tests covering schema models, engine loop, tool registries, and all ETCSLV components. No external dependencies required.
+**Total: 508 tests.** No external dependencies required for kernel tests.
 
 ---
 
@@ -204,6 +212,12 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ## Security
 
 Agents with tool access can cause real damage. Production deployments should implement permission gates, sandbox execution, and prompt injection defenses. See the coding agent example for a reference permission pipeline.
+
+---
+
+## Acknowledgments
+
+The theoretical foundation of this project is based on the [Agent Harness Survey](https://github.com/Gloriaameng/Awesome-Agent-Harness).
 
 ---
 

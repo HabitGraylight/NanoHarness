@@ -29,7 +29,7 @@ python main.py "Add type hints to all public functions in nanoharness/core/"
 **Interactive REPL** (default) — keeps running between tasks:
 
 ```
-  ╔══════════════════════════════════╗
+  ╔════════════════════════════════════╗
   ║       NanoHarness Coding Agent   ║
   ╚══════════════════════════════════╝
 
@@ -51,7 +51,7 @@ python main.py "Add type hints to all public functions in nanoharness/core/"
   ✓ Replaced 1 occurrence in nanoharness/core/engine.py
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Done. Steps: 3 | Success
+  Done. Steps: 3 | Success | Verified: Yes
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ❯ _
@@ -80,6 +80,7 @@ coding_agent/
 │   ├── adapters.py        #   OpenAI-compatible LLM adapter
 │   ├── background.py      #   Background task executor (thread pool)
 │   ├── builder.py         #   Engine assembly — wires all components
+│   ├── coding_evaluator.py#   V: error-loop/spinning/stagnation detection + LLM goal verification
 │   ├── context.py         #   Three-layer context: spill → compress → summarize
 │   ├── dispatch.py        #   Tool registry with path sandboxing
 │   ├── handlers.py        #   Script + Python tool registration
@@ -96,11 +97,10 @@ coding_agent/
 │   ├── team.py            #   Long-lived teammate system (daemon threads)
 │   ├── tools.py           #   Top-level tool assembly
 │   ├── ui.py              #   REPL loop + readline + history
-│   ├── worktree.py        #   Git worktree task isolation
-│   └── prompts.yaml       #   Coding-agent prompt templates
+│   └── worktree.py        #   Git worktree task isolation
 ├── configs/               # Runtime configuration
 │   ├── mcp_servers.json   #   MCP server discovery config
-│   └── scripts/           #   28 shell script tools (*.sh)
+│   └── scripts/           #   27 shell script tools (*.sh)
 ├── skills/                #   Markdown skill definitions
 │   ├── code-review.md
 │   ├── debugging.md
@@ -110,7 +110,7 @@ coding_agent/
 ├── nanoharness/           # Symlink → ../../nanoharness (shared kernel)
 └── tests/                 # Test suite
     ├── conftest.py        #   Shared fixtures + path setup
-    ├── ut/                #   Unit tests (14 files, 272 tests)
+    ├── ut/                #   Unit tests (15 files, 291 tests)
     └── st/                #   System/integration tests (11 files, 143 tests)
 ```
 
@@ -125,7 +125,9 @@ NanoEngine
   ├── C (Context)         — ManagedContext: spill/compress/summarize (app)
   ├── S (State)           — JsonStateStore (kernel)
   ├── L (Hooks)           — SimpleHookManager + ToolHookRunner (app)
-  └── V (Evaluation)      — TraceEvaluator (kernel)
+  └── V (Evaluation)      — CodingAgentEvaluator (app)
+         ├── should_stop()       — detect error loops, spinning, stagnation
+         └── evaluate_success()  — LLM-based independent goal verification
 ```
 
 Key subsystems (all app-layer, no kernel changes):
@@ -143,6 +145,7 @@ Key subsystems (all app-layer, no kernel changes):
 | **Skills** | `skills.py` | Markdown skill files with YAML frontmatter |
 | **Context** | `context.py` | Three-layer: spill large results → compress old → summarize when long |
 | **Resilient LLM** | `resilient_llm.py` | Continuation, context compression, exponential backoff |
+| **Evaluation** | `coding_evaluator.py` | Error-loop / spinning / stagnation detection + LLM goal verification |
 
 ## Available Tools
 
@@ -180,15 +183,15 @@ Modes: `interactive` (default, asks user), `auto` (deny unknown), `yolo` (allow 
 
 ```bash
 # From examples/coding_agent/
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ut/ -v    # Unit tests (272)
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ut/ -v    # Unit tests (291)
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/st/ -v    # Integration tests (143)
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v       # All (415)
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v       # All (434)
 ```
 
 | Layer | Files | Tests | What's tested |
 |---|---|---|---|
-| **UT** | 14 | 272 | Pure logic: sandbox, permissions, cron matching, task CRUD, memory I/O, adapter protocol |
-| **ST** | 11 | 143 | Real OS: git worktrees, subprocess MCP, threading, full engine wiring |
+| **UT** | 15 | 291 | Pure logic: sandbox, permissions, cron matching, task CRUD, memory I/O, adapter protocol, evaluation detection |
+| **ST** | 11 | 143 | Real OS: git worktrees, subprocess MCP, threading, full engine wiring, builder assembly |
 
 UT = no subprocess, no threading, no `time.sleep`. ST = real OS operations, multi-component integration.
 

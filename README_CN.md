@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-63%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-508%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -30,7 +30,7 @@ NanoHarness 是一个极简的 Python Agent 框架，实现了 [Agent Harness Su
 | **C** | 上下文管理 | 上下文窗口的组装与压缩 |
 | **S** | 状态存储 | 跨轮次持久化与崩溃恢复 |
 | **L** | 生命周期钩子 | 横切面插桩：日志、策略、认证 |
-| **V** | 评估 | 步骤级轨迹记录与结果报告 |
+| **V** | 评估 | 轨迹记录、循环中早停检测、独立目标验证 |
 
 内核**只**提供这六个接口和一个编排引擎。其余一切——调用哪个 LLM、如何管理记忆、是否执行权限校验——均由应用层决定。
 
@@ -46,11 +46,13 @@ NanoHarness 是一个极简的 Python Agent 框架，实现了 [Agent Harness Su
 │   │  E: NanoEngine                                          │  │
 │   │                                                         │  │
 │   │    ON_START ──► Think ──► Act ──► Observe ──► ON_STEP   │  │
-│   │                    │         │          │                │  │
-│   │                    ▼         ▼          ▼                │  │
+│   │                    │         │          │       │        │  │
+│   │                    ▼         ▼          ▼       ▼        │  │
 │   │               LLMProtocol  T: Tools  C: Context         │  │
+│   │                                              V: Eval    │  │
+│   │                                    should_stop? ──► STOP │  │
 │   │                                                         │  │
-│   │    ON_END ◄── V: Report ◄── S: State ◄────────────────  │  │
+│   │    ON_END ◄── V: Report + evaluate_success              │  │
 │   └─────────────────────────────────────────────────────────┘  │
 │                                                                 │
 │   接口：  BaseToolRegistry  BaseContextManager                  │
@@ -80,23 +82,23 @@ NanoHarness 是一个极简的 Python Agent 框架，实现了 [Agent Harness Su
 ```
 nanoharness/
   core/                  # 内核：接口 + 引擎
-    schema.py            #   ToolCall, LLMResponse, AgentMessage, StepResult
+    schema.py            #   ToolCall, LLMResponse, AgentMessage, StepResult, StopSignal, EvaluationResult
     base.py              #   ETCSLV ABCs, LLMProtocol, HookStage
-    engine.py            #   NanoEngine
+    engine.py            #   NanoEngine（含循环中评估）
     prompt.py            #   PromptManager（YAML 模板加载器）
   components/            # ETCSLV 最简实现
     tools/               #   T: DictToolRegistry, ScriptToolRegistry
     context/             #   C: SimpleContextManager
     state/               #   S: JsonStateStore
     hooks/               #   L: SimpleHookManager
-    evaluator/           #   V: TraceEvaluator
+    evaluator/           #   V: TraceEvaluator（含 should_stop + evaluate_success）
   utils/                 # get_logger, count_tokens
 configs/
   prompts.yaml           # Prompt 模板
-  scripts/               # Shell 脚本工具（自动发现，26 个）
+  scripts/               # Shell 脚本工具（自动发现，27 个）
 examples/
-  coding_agent/          # 完整 Coding Agent 参考
-tests/                   # 63 个测试
+  coding_agent/          # 完整 Coding Agent 参考（434 个测试）
+tests/                   # 74 个内核测试
 ```
 
 ---
@@ -140,9 +142,10 @@ NanoEngine.run(query)
           │
           ├─ S.save_state()
           ├─ V.log_step()
+          ├─ V.should_stop()?  ──► 若陷入循环/停滞则提前终止
           └─ L.trigger(ON_STEP_END)
 
-     ├─ V.get_report()
+     ├─ V.get_report()        （包含 evaluate_success 验证结果）
      └─ L.trigger(ON_TASK_END)
 ```
 
@@ -176,17 +179,22 @@ def chat(self, messages, tools=None) -> LLMResponse: ...
 
 **自定义组件** — 继承任意 `Base*` ABC，注入 `NanoEngine`。
 
-完整参考见 `examples/coding_agent/`，其中组装了自定义 LLM 适配器、记忆策略、权限流水线、子 Agent 委派和技能加载——全部在内核之上构建，无需修改内核。
+完整参考见 `examples/coding_agent/`，其中组装了自定义 LLM 适配器、记忆策略、权限流水线、子 Agent 委派、技能加载和评估——全部在内核之上构建，无需修改内核。
 
 ---
 
 ## 测试
 
 ```bash
+# 内核测试（74 个）
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
+
+# Coding Agent 测试（434 个：291 UT + 143 ST）
+cd examples/coding_agent
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-63 个测试覆盖 Schema 模型、引擎循环、工具注册器和所有 ETCSLV 组件。无需外部依赖。
+**共 508 个测试。** 内核测试无需外部依赖。
 
 ---
 
@@ -204,6 +212,12 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ## 安全
 
 拥有工具访问权限的 Agent 可能造成实际损害。生产部署应实现权限门控、沙箱执行和 Prompt 注入防御。参见 Coding Agent 示例中的权限流水线参考实现。
+
+---
+
+## 致谢
+
+本项目的理论基础来自 [Agent Harness Survey](https://github.com/Gloriaameng/Awesome-Agent-Harness)。
 
 ---
 
