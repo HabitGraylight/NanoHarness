@@ -54,10 +54,19 @@ class TestScriptRegistryLoading:
         for t in ["sys_info", "shell_exec"]:
             assert t in names
 
-    def test_schema_has_parameters(self):
+    def test_schema_and_argument_validation(self):
         reg = ScriptToolRegistry(SCRIPTS_DIR)
         for schema in reg.get_tool_schemas():
             assert "parameters" in schema["function"]
+
+        with pytest.raises(ValueError, match="Protected environment"):
+            reg.call("sys_info", {"section": "cwd", "PATH": "/tmp"})
+
+        with pytest.raises(ValueError, match="Unexpected parameter"):
+            reg.call("sys_info", {"section": "cwd", "undeclared": "value"})
+
+        with pytest.raises(ValueError, match="Missing required parameter"):
+            reg.call("file_read", {})
 
 
 class TestGitToolsViaScripts:
