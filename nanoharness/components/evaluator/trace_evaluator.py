@@ -18,12 +18,12 @@ class TraceEvaluator(BaseEvaluator):
         """Appends a completed step to the trajectory."""
         self.trajectory.append(step)
 
-    def get_report(self) -> Dict:
+    def get_report(self, query: str = "") -> Dict:
         """Computes summary statistics from the recorded trajectory."""
         total_steps = len(self.trajectory)
 
         # Use evaluate_success for the official verdict
-        evaluation = self.evaluate_success("", self.trajectory)
+        evaluation = self.evaluate_success(query, self.trajectory)
 
         # Check if any step had a stop_signal (early stop)
         stop_reason = ""

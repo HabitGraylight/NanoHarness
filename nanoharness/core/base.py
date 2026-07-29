@@ -69,7 +69,7 @@ class BaseEvaluator(BaseComponent):
         pass
 
     @abc.abstractmethod
-    def get_report(self) -> Dict:
+    def get_report(self, query: str = "") -> Dict:
         pass
 
     def should_stop(self, trajectory: List[StepResult]) -> StopSignal:

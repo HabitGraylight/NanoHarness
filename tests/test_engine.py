@@ -130,7 +130,7 @@ class TestEngineMidLoopStop:
             def log_step(self, step):
                 self.trajectory.append(step)
 
-            def get_report(self):
+            def get_report(self, query=""):
                 return {"summary": {"total_steps": len(self.trajectory), "success": False}, "trajectory": []}
 
             def should_stop(self, trajectory):
@@ -190,3 +190,31 @@ class TestEngineMidLoopStop:
         )
         report = engine.run("test")
         assert report["summary"]["total_steps"] == 3
+
+
+class TestEngineFinalEvaluation:
+    def test_final_evaluation_receives_user_query(self, mock_llm):
+        """The original task must be available to query-aware evaluators."""
+
+        class QueryCapturingEvaluator(TraceEvaluator):
+            def __init__(self):
+                super().__init__()
+                self.evaluated_query = None
+
+            def evaluate_success(self, query, trajectory):
+                self.evaluated_query = query
+                return super().evaluate_success(query, trajectory)
+
+        evaluator = QueryCapturingEvaluator()
+        engine = NanoEngine(
+            llm_client=mock_llm([LLMResponse(content="done")]),
+            tools=DictToolRegistry(),
+            context=SimpleContextManager(),
+            state=JsonStateStore("/tmp/test_final_evaluation.json"),
+            hooks=SimpleHookManager(),
+            evaluator=evaluator,
+        )
+
+        engine.run("fix the evaluator")
+
+        assert evaluator.evaluated_query == "fix the evaluator"
