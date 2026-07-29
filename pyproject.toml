@@ -9,6 +9,7 @@ description = "A lightweight Python harness engineering framework"
 requires-python = ">=3.10"
 dependencies = [
     "pydantic>=2.0",
+    "PyYAML>=6.0",
 ]
 
 [project.optional-dependencies]

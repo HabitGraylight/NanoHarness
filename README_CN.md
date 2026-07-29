@@ -111,7 +111,7 @@ cd NanoHarness
 pip install -e .
 ```
 
-内核无必选外部依赖。LLM 客户端和其他集成由各应用按需安装。
+内核仅依赖 Pydantic 和 PyYAML。LLM 客户端和其他集成由各应用按需安装。
 
 ```bash
 # 运行最简示例
@@ -194,7 +194,7 @@ cd examples/coding_agent
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**共 508 个测试。** 内核测试无需外部依赖。
+**共 508 个测试。** 内核测试只需要内核依赖与 pytest。
 
 ---
 

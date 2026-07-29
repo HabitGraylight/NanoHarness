@@ -111,7 +111,7 @@ cd NanoHarness
 pip install -e .
 ```
 
-The kernel has no required external dependencies. LLM clients and other integrations are installed by each application as needed.
+The kernel depends only on Pydantic and PyYAML. LLM clients and other integrations are installed by each application as needed.
 
 ```bash
 # Run the minimal example
@@ -194,7 +194,7 @@ cd examples/coding_agent
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**Total: 508 tests.** No external dependencies required for kernel tests.
+**Total: 508 tests.** Kernel tests require only the kernel dependencies and pytest.
 
 ---
 

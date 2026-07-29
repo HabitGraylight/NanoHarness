@@ -1,5 +1,6 @@
 # Core
 pydantic>=2.0
+PyYAML>=6.0
 
 # LLM providers (uncomment what you need)
 openai>=1.0
