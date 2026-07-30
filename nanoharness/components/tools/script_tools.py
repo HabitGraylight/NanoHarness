@@ -22,6 +22,24 @@ _TYPE_MAP = {
     "boolean": "boolean",
 }
 
+# Environment variables that can alter shell startup, executable lookup, or
+# dynamic loading. Tool arguments must never be allowed to override them.
+_PROTECTED_ENV_KEYS = frozenset({
+    "BASH_ENV",
+    "BASHOPTS",
+    "CDPATH",
+    "DYLD_INSERT_LIBRARIES",
+    "DYLD_LIBRARY_PATH",
+    "ENV",
+    "GLOBIGNORE",
+    "IFS",
+    "LD_LIBRARY_PATH",
+    "LD_PRELOAD",
+    "PATH",
+    "PYTHONPATH",
+    "SHELLOPTS",
+})
+
 
 def _parse_script(path: Path) -> Dict[str, Any]:
     """Parse a shell script's header comments to extract metadata."""
@@ -126,9 +144,46 @@ class ScriptToolRegistry(DictToolRegistry):
             "_script_path": script_path,
         }
 
+    def call(self, name: str, args: Dict) -> Any:
+        """Validate script arguments before exposing them as environment variables."""
+        if name not in self._tools:
+            return super().call(name, args)
+        if not isinstance(args, dict):
+            raise TypeError("Script tool arguments must be a dictionary")
+
+        protected = sorted(set(args) & _PROTECTED_ENV_KEYS)
+        if protected:
+            raise ValueError(
+                f"Protected environment parameter(s) not allowed: {protected}"
+            )
+
+        parameters = self._tools[name]["schema"]["function"]["parameters"]
+        allowed = set(parameters["properties"])
+        unexpected = sorted(set(args) - allowed)
+        if unexpected:
+            raise ValueError(
+                f"Unexpected parameter(s) for script tool '{name}': {unexpected}"
+            )
+
+        missing = sorted(set(parameters["required"]) - set(args))
+        if missing:
+            raise ValueError(
+                f"Missing required parameter(s) for script tool '{name}': {missing}"
+            )
+
+        return super().call(name, args)
+
     @staticmethod
     def _exec(script_path: Path, args: Dict[str, Any], timeout: int = 60) -> str:
-        env = os.environ.copy()
+        # Do not inherit shell startup or dynamic-loader controls. Preserve the
+        # caller's PATH for commands used inside trusted scripts, but invoke the
+        # shell itself by absolute path.
+        env = {
+            key: value
+            for key, value in os.environ.items()
+            if key not in (_PROTECTED_ENV_KEYS - {"PATH"})
+        }
+        env["PATH"] = os.environ.get("PATH", os.defpath)
         for k, v in args.items():
             if isinstance(v, bool):
                 env[k] = "true" if v else "false"
@@ -136,7 +191,7 @@ class ScriptToolRegistry(DictToolRegistry):
                 env[k] = str(v)
 
         result = subprocess.run(
-            ["bash", str(script_path)],
+            ["/bin/bash", str(script_path)],
             capture_output=True,
             text=True,
             timeout=timeout,
