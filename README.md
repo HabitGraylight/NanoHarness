@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-509%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-535%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -98,6 +98,7 @@ configs/
   scripts/               # Shell-script tools (auto-discovered, 27 tools)
 examples/
   coding_agent/          # Full-featured coding agent reference (434 tests)
+  nano_loop/             # Evidence-gated Loop Engineering example (26 tests)
 tests/                   # 75 kernel tests
 ```
 
@@ -119,6 +120,10 @@ python main.py
 
 # Run the coding agent
 cd examples/coding_agent && python main.py
+
+# Run an evidence-gated loop
+cd examples/nano_loop
+python main.py run configs/loops/local_fix.yaml --repo ../.. --task "Your task"
 ```
 
 ---
@@ -181,6 +186,8 @@ def chat(self, messages, tools=None) -> LLMResponse: ...
 
 See `examples/coding_agent/` for a reference that wires together a custom LLM adapter, memory strategy, permission pipeline, subagent delegation, skill loading, and evaluation — all built on top of the kernel without modifying it.
 
+See `examples/nano_loop/` for an outer-loop control plane that repeatedly creates fresh NanoEngine runs, verifies their artifacts, persists evidence, enforces budgets, and stops at explicit human gates.
+
 ---
 
 ## Testing
@@ -192,9 +199,13 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 # Coding agent tests (434: 291 UT + 143 ST)
 cd examples/coding_agent
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
+
+# NanoLoop tests (26)
+cd ../nano_loop
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**Total: 509 tests.** Kernel tests require only the kernel dependencies and pytest.
+**Total: 535 tests.** Kernel tests require only the kernel dependencies and pytest.
 
 ---
 

@@ -9,6 +9,7 @@ build/
 *.egg-info/
 
 examples/coding_agent/sandbox/
+examples/nano_loop/sandbox/
 
 # Runtime artifacts
 run_state.json

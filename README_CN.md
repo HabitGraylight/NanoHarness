@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-509%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-535%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -98,6 +98,7 @@ configs/
   scripts/               # Shell 脚本工具（自动发现，27 个）
 examples/
   coding_agent/          # 完整 Coding Agent 参考（434 个测试）
+  nano_loop/             # 证据驱动的 Loop Engineering 示例（26 个测试）
 tests/                   # 75 个内核测试
 ```
 
@@ -119,6 +120,10 @@ python main.py
 
 # 运行 Coding Agent
 cd examples/coding_agent && python main.py
+
+# 运行证据驱动的 Loop
+cd examples/nano_loop
+python main.py run configs/loops/local_fix.yaml --repo ../.. --task "你的任务"
 ```
 
 ---
@@ -181,6 +186,8 @@ def chat(self, messages, tools=None) -> LLMResponse: ...
 
 完整参考见 `examples/coding_agent/`，其中组装了自定义 LLM 适配器、记忆策略、权限流水线、子 Agent 委派、技能加载和评估——全部在内核之上构建，无需修改内核。
 
+`examples/nano_loop/` 提供外层 Loop 控制面：反复创建干净的 NanoEngine 运行、验证产物、持久化证据、执行预算策略，并在明确的人工 Gate 停止。
+
 ---
 
 ## 测试
@@ -192,9 +199,13 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 # Coding Agent 测试（434 个：291 UT + 143 ST）
 cd examples/coding_agent
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
+
+# NanoLoop 测试（26 个）
+cd ../nano_loop
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**共 509 个测试。** 内核测试只需要内核依赖与 pytest。
+**共 535 个测试。** 内核测试只需要内核依赖与 pytest。
 
 ---
 

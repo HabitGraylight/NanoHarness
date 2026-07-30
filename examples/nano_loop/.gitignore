@@ -1,0 +1,7 @@
+# NanoLoop runtime state and disposable worktrees
+sandbox/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/

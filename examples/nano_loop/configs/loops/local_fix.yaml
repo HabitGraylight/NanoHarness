@@ -1,0 +1,32 @@
+name: local-code-repair
+goal: >
+  Make the requested repository change and satisfy every configured acceptance
+  command. Verification evidence, not the worker's claim, decides completion.
+
+worker:
+  type: nano_engine
+  model: deepseek-chat
+  base_url: https://api.deepseek.com
+  max_steps: 20
+
+workspace:
+  type: git_worktree
+  base_ref: HEAD
+
+verify:
+  commands:
+    - PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -q
+    - git diff --check
+  timeout_seconds: 300
+  max_output_chars: 12000
+
+budget:
+  max_iterations: 3
+  max_wall_seconds: 1800
+  max_consecutive_failures: 3
+
+gates:
+  require_human:
+    - commit
+    - push
+    - merge
