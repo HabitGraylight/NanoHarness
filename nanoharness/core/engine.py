@@ -69,7 +69,7 @@ class NanoEngine:
             if step_res.status == "terminated":
                 break
 
-        report = self.evaluator.get_report()
+        report = self.evaluator.get_report(user_query)
         self.hooks.trigger(HookStage.ON_TASK_END, report)
         return report
 
