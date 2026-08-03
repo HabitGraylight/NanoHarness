@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-561%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-569%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -94,6 +94,10 @@ nanoharness/
     hooks/               #   L: SimpleHookManager
     lifecycle/           #   Policy、审批、执行器与事件组件
     evaluator/           #   V: TraceEvaluator（含 should_stop + evaluate_success）
+  extensions/            # 可复用能力包
+    base.py              #   Manifest、配置、安装与回执协议
+    manager.py           #   依赖/冲突校验与安装清单
+    memory/              #   FileMemoryManager + MemoryExtension
   utils/                 # get_logger, count_tokens
 configs/
   prompts.yaml           # Prompt 模板
@@ -101,7 +105,7 @@ configs/
 examples/
   coding_agent/          # 完整 Coding Agent 参考（434 个测试）
   nano_loop/             # 证据驱动的 Loop Engineering 示例（27 个测试）
-tests/                   # 100 个内核测试
+tests/                   # 108 个内核测试
 ```
 
 ---
@@ -191,6 +195,32 @@ NanoEngine.run(query)
 
 ---
 
+## 可复用 Extensions
+
+Extension Protocol 1.0 为可复用能力提供统一的白箱结构：
+
+- `ExtensionManifest` 声明带版本的能力、依赖和冲突；
+- 每个 Extension 在安装前即可输出 Pydantic 配置 Schema；
+- `ExtensionContext` 是显式的工具、服务和能力安装表面；
+- `ExtensionInstallation` 是可序列化的工具与服务安装回执；
+- `ExtensionManager.inspect()` 返回解析后的能力清单。
+
+```python
+from nanoharness import DictToolRegistry, ExtensionContext, ExtensionManager
+from nanoharness.extensions.memory import MemoryExtension
+
+context = ExtensionContext(tools=DictToolRegistry())
+extensions = ExtensionManager(context)
+extensions.install(MemoryExtension(), {"directory": ".memory"})
+
+print(extensions.inspect())
+memory = context.services["memory"]
+```
+
+`MemoryExtension` 是第一个完成提取的公共能力。Coding Agent 已直接使用它，原有 `app.memory` 和 `register_memory_tools()` 仅作为兼容转发层保留。
+
+---
+
 ## 工具
 
 工具满足 `BaseToolRegistry` 接口，提供两个方法：`get_tool_schemas()` 和 `call(name, args)`。
@@ -226,7 +256,7 @@ def chat(self, messages, tools=None) -> LLMResponse: ...
 ## 测试
 
 ```bash
-# 内核测试（100 个）
+# 内核测试（108 个）
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # Coding Agent 测试（434 个：291 UT + 143 ST）
@@ -238,7 +268,7 @@ cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**共 561 个测试。** 内核测试只需要内核依赖与 pytest。
+**共 569 个测试。** 内核测试只需要内核依赖与 pytest。
 
 ---
 

@@ -10,7 +10,11 @@ from typing import Dict, List
 
 from nanoharness.components.tools.script_tools import _parse_script
 
-from app.dispatch import DispatchRegistry, bash_handler, bash_wrap, inprocess_handler
+from nanoharness.extensions.memory import (
+    register_memory_tools as register_extension_memory_tools,
+)
+
+from app.dispatch import DispatchRegistry, bash_handler, bash_wrap
 
 
 # ── Path param declarations ──
@@ -160,104 +164,5 @@ def _list_files_builder(args: Dict) -> List[str]:
 
 
 def register_memory_tools(registry: DispatchRegistry, memory):
-    """Register save_memory, recall_memory, and list_memories tools."""
-
-    def save_memory(topic: str, content: str, description: str = "",
-                    type: str = "note") -> str:
-        filename = memory.save(topic, content, description=description, type=type)
-        return f"Saved memory '{topic}' → {filename}.md"
-
-    def recall_memory(query: str, top_k: int = 5) -> str:
-        results = memory.recall(query, top_k)
-        if not results:
-            return "No matching memories found."
-        parts = []
-        for e in results:
-            preview = e.content[:300] + ("..." if len(e.content) > 300 else "")
-            parts.append(f"## {e.name}\n{preview}")
-        return "\n\n---\n".join(parts)
-
-    def list_memories() -> str:
-        entries = memory.list_all()
-        if not entries:
-            return "No memories stored yet."
-        return "\n".join(
-            f"- [{e.name}] {e.description}" if e.description else f"- [{e.name}]"
-            for e in entries
-        )
-
-    registry.register(
-        name="save_memory",
-        handler=inprocess_handler(save_memory),
-        schema={
-            "type": "function",
-            "function": {
-                "name": "save_memory",
-                "description": (
-                    "Save important information to long-term memory. "
-                    "Use this when the user mentions preferences, conventions, "
-                    "project context, or anything worth remembering across sessions."
-                ),
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "topic": {
-                            "type": "string",
-                            "description": "Short topic name (e.g. 'prefer_tabs', 'feedback_tests')",
-                        },
-                        "content": {
-                            "type": "string",
-                            "description": "Full content to remember (markdown OK)",
-                        },
-                        "description": {
-                            "type": "string",
-                            "description": "One-line summary for the index",
-                        },
-                        "type": {
-                            "type": "string",
-                            "enum": ["note", "feedback", "reference", "project"],
-                            "description": "Category of this memory",
-                        },
-                    },
-                    "required": ["topic", "content"],
-                },
-            },
-        },
-    )
-
-    registry.register(
-        name="recall_memory",
-        handler=inprocess_handler(recall_memory),
-        schema={
-            "type": "function",
-            "function": {
-                "name": "recall_memory",
-                "description": "Search long-term memories by keyword.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query": {"type": "string", "description": "Search keyword"},
-                        "top_k": {"type": "integer", "description": "Max results (default 5)"},
-                    },
-                    "required": ["query"],
-                },
-            },
-        },
-    )
-
-    registry.register(
-        name="list_memories",
-        handler=inprocess_handler(list_memories),
-        schema={
-            "type": "function",
-            "function": {
-                "name": "list_memories",
-                "description": "List all stored memories.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {},
-                    "required": [],
-                },
-            },
-        },
-    )
+    """Backward-compatible wrapper around the reusable Memory extension."""
+    return register_extension_memory_tools(registry, memory)

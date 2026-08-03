@@ -93,13 +93,28 @@ class DictToolRegistry(BaseToolRegistry):
         }
         return func
 
+    def register(self, name: str, handler: Callable[[Dict], Any], schema: Dict):
+        """Register a schema-first handler that receives one argument dictionary.
+
+        This is the common installation surface used by reusable extensions.
+        The decorator API remains available for ordinary Python tools.
+        """
+        self._tools[name] = {
+            "func": handler,
+            "schema": schema,
+            "accepts_argument_dict": True,
+        }
+
     def get_tool_schemas(self) -> List[Dict]:
         return [info["schema"] for info in self._tools.values()]
 
     def call(self, name: str, args: Dict) -> Any:
         if name not in self._tools:
             raise KeyError(f"Tool '{name}' not found. Available: {list(self._tools)}")
-        return self._tools[name]["func"](**args)
+        tool = self._tools[name]
+        if tool.get("accepts_argument_dict"):
+            return tool["func"](args)
+        return tool["func"](**args)
 
     def merge(self, other: "DictToolRegistry") -> None:
         """Merge tools from another registry into this one.

@@ -11,7 +11,6 @@ from nanoharness.components.lifecycle import CompositeToolPolicy
 from app.adapters import OpenAIAdapter
 from app.background import BackgroundExecutor, register_background_tools
 from app.coding_evaluator import CodingAgentEvaluator
-from app.handlers import register_memory_tools
 from app.resilient_llm import ResilientLLM
 from app.scheduler import Scheduler, register_schedule_tools
 from nanoharness.components.state.json_store import JsonStateStore
@@ -19,10 +18,11 @@ from nanoharness.core.base import HookStage
 from nanoharness.core.engine import NanoEngine
 from nanoharness.core.prompt import PromptManager
 from nanoharness.core.schema import AgentMessage
+from nanoharness.extensions import ExtensionContext, ExtensionManager
+from nanoharness.extensions.memory import MemoryExtension
 
 from app.context import ManagedContext
 from app.hooks import build_hooks, build_tool_hooks
-from app.memory import FileMemoryManager
 from app.permissions import TerminalApprovalBroker, build_permissions
 from app.prompt_builder import SystemPromptBuilder
 from app.skills import SkillRegistry, register_skill_tool
@@ -67,8 +67,16 @@ def build_coding_engine(
 
     # --- Memory (file-based: .memory/ directory) ---
     memory_dir = os.path.join(workspace_root, ".memory")
-    memory = FileMemoryManager(memory_dir)
-    register_memory_tools(registry=tools, memory=memory)
+    extension_context = ExtensionContext(
+        tools=tools,
+        metadata={"workspace_root": workspace_root},
+    )
+    extension_manager = ExtensionManager(extension_context)
+    extension_manager.install(
+        MemoryExtension(),
+        {"directory": memory_dir},
+    )
+    memory = extension_context.services["memory"]
 
     # --- Task board ---
     task_board = TaskBoard(persist_path=os.path.join(SANDBOX, "tasks.json"))
@@ -151,7 +159,7 @@ def build_coding_engine(
     # --- Wire task board awareness (compact summary on each task start) ---
     _wire_task_awareness(hooks, task_board, context)
 
-    return NanoEngine(
+    engine = NanoEngine(
         llm_client=llm,
         tools=tools,
         context=context,
@@ -162,6 +170,10 @@ def build_coding_engine(
         approval_broker=TerminalApprovalBroker(),
         max_steps=max_steps,
     )
+    # Application-level white-box inventory; the kernel does not depend on
+    # the extension system, but callers can inspect what this profile loaded.
+    engine.extension_manager = extension_manager
+    return engine
 
 
 def _wire_system_prompt_refresh(hooks, prompt_builder, context):

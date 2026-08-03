@@ -41,6 +41,9 @@ class TestBuilderReturnsEngine:
         assert engine.tools is not None
         assert engine.context is not None
         assert engine.max_steps == 20
+        inventory = engine.extension_manager.inspect()
+        assert inventory["extensions"][0]["name"] == "memory.file"
+        assert "memory.store" in inventory["capabilities"]
 
     def test_builder_has_tools(self, monkeypatch, tmp_path):
         """Engine has tools registered (file_read, search_code, etc.)."""
@@ -61,6 +64,7 @@ class TestBuilderReturnsEngine:
         # Core tools that should always be present
         assert "skill" in tool_names
         assert "task" in tool_names
+        assert "save_memory" in tool_names
 
 
 class TestWireTaskAwareness:

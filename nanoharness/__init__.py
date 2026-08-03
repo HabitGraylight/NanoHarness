@@ -58,3 +58,21 @@ from nanoharness.components.lifecycle import (
 )
 from nanoharness.components.state import JsonStateStore
 from nanoharness.components.tools import DictToolRegistry, ScriptToolRegistry
+
+# ── Reusable extensions ──
+
+from nanoharness.extensions import (
+    EXTENSION_PROTOCOL_VERSION,
+    BaseExtension,
+    ExtensionContext,
+    ExtensionInstallation,
+    ExtensionManager,
+    ExtensionManifest,
+    ExtensionProtocol,
+)
+from nanoharness.extensions.memory import (
+    FileMemoryManager,
+    MemoryEntry,
+    MemoryExtension,
+    MemoryExtensionConfig,
+)
