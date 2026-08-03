@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-535%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-548%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -82,7 +82,7 @@ NanoHarness 是一个极简的 Python Agent 框架，实现了 [Agent Harness Su
 ```
 nanoharness/
   core/                  # 内核：接口 + 引擎
-    schema.py            #   ToolCall, LLMResponse, AgentMessage, StepResult, StopSignal, EvaluationResult
+    schema.py            #   消息、工具执行、Run/Checkpoint、事件与评估协议
     base.py              #   ETCSLV ABCs, LLMProtocol, HookStage
     engine.py            #   NanoEngine（含循环中评估）
     prompt.py            #   PromptManager（YAML 模板加载器）
@@ -98,8 +98,8 @@ configs/
   scripts/               # Shell 脚本工具（自动发现，27 个）
 examples/
   coding_agent/          # 完整 Coding Agent 参考（434 个测试）
-  nano_loop/             # 证据驱动的 Loop Engineering 示例（26 个测试）
-tests/                   # 75 个内核测试
+  nano_loop/             # 证据驱动的 Loop Engineering 示例（27 个测试）
+tests/                   # 87 个内核测试
 ```
 
 ---
@@ -158,6 +158,22 @@ NanoEngine.run(query)
 
 ---
 
+## Core Protocol v2
+
+核心协议 v2 在保持 `NanoEngine.run(query)` 和原有字典报告兼容的同时，增加了：
+
+- 稳定的 `run_id`、`session_id`、协议版本与运行状态；
+- Provider ToolCall ID 的保留，以及 Engine 生成的稳定回退 ID；
+- `StepResult.actions` 完整多工具执行轨迹；
+- 有序 `HarnessEvent` 事件流与可选 `EventSinkProtocol`；
+- 包含查询、轨迹、终止原因和错误的 `RunCheckpoint`；
+- 每个 Run 独立的评估轨迹，Context 仍可在同一 Session 内持续；
+- `EvaluationResult.achieved` 作为正式成功判定。
+
+旧的 `StepResult.action` 和 `observation` 字段暂时保留，并映射到该步最后一次工具执行。
+
+---
+
 ## 工具
 
 工具满足 `BaseToolRegistry` 接口，提供两个方法：`get_tool_schemas()` 和 `call(name, args)`。
@@ -193,19 +209,19 @@ def chat(self, messages, tools=None) -> LLMResponse: ...
 ## 测试
 
 ```bash
-# 内核测试（75 个）
+# 内核测试（87 个）
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # Coding Agent 测试（434 个：291 UT + 143 ST）
 cd examples/coding_agent
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
-# NanoLoop 测试（26 个）
+# NanoLoop 测试（27 个）
 cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**共 535 个测试。** 内核测试只需要内核依赖与 pytest。
+**共 548 个测试。** 内核测试只需要内核依赖与 pytest。
 
 ---
 

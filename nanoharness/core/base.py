@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional, Protocol
 from nanoharness.core.schema import (
     AgentMessage,
     EvaluationResult,
+    HarnessEvent,
     LLMResponse,
     StepResult,
     StopSignal,
@@ -24,6 +25,13 @@ class LLMProtocol(Protocol):
         messages: List[Dict[str, Any]],
         tools: Optional[List[Dict[str, Any]]] = None,
     ) -> LLMResponse:
+        ...
+
+
+class EventSinkProtocol(Protocol):
+    """Optional observer for the ordered events emitted by a run."""
+
+    def publish(self, event: HarnessEvent) -> None:
         ...
 
 

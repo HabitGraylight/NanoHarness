@@ -1,3 +1,5 @@
+import pytest
+
 from nanoharness.components.context.simple_context import SimpleContextManager
 from nanoharness.components.evaluator.trace_evaluator import TraceEvaluator
 from nanoharness.components.hooks.simple_hooks import SimpleHookManager
@@ -5,17 +7,23 @@ from nanoharness.components.state.json_store import JsonStateStore
 from nanoharness.components.tools.dict_registry import DictToolRegistry
 from nanoharness.core.base import BaseEvaluator
 from nanoharness.core.engine import NanoEngine
-from nanoharness.core.schema import LLMResponse, StepResult, StopSignal, ToolCall
+from nanoharness.core.schema import (
+    EvaluationResult,
+    LLMResponse,
+    StepResult,
+    StopSignal,
+    ToolCall,
+)
 
 
 class TestEngineBasicLoop:
-    def test_immediate_terminate(self, mock_llm):
+    def test_immediate_terminate(self, mock_llm, tmp_path):
         llm = mock_llm([LLMResponse(content="done")])
         engine = NanoEngine(
             llm_client=llm,
             tools=DictToolRegistry(),
             context=SimpleContextManager(),
-            state=JsonStateStore("/tmp/test_state.json"),
+            state=JsonStateStore(str(tmp_path / "test_state.json")),
             hooks=SimpleHookManager(),
             evaluator=TraceEvaluator(),
         )
@@ -23,7 +31,7 @@ class TestEngineBasicLoop:
         assert report["summary"]["total_steps"] == 1
         assert report["summary"]["success"] is True
 
-    def test_tool_call_then_terminate(self, mock_llm):
+    def test_tool_call_then_terminate(self, mock_llm, tmp_path):
         reg = DictToolRegistry()
 
         @reg.tool
@@ -42,7 +50,7 @@ class TestEngineBasicLoop:
             llm_client=llm,
             tools=reg,
             context=SimpleContextManager(),
-            state=JsonStateStore("/tmp/test_state2.json"),
+            state=JsonStateStore(str(tmp_path / "test_state2.json")),
             hooks=SimpleHookManager(),
             evaluator=TraceEvaluator(),
         )
@@ -52,7 +60,7 @@ class TestEngineBasicLoop:
         assert traj[0]["observation"] == "hi"
         assert traj[0]["status"] == "success"
 
-    def test_tool_error(self, mock_llm):
+    def test_tool_error(self, mock_llm, tmp_path):
         reg = DictToolRegistry()
 
         @reg.tool
@@ -71,7 +79,7 @@ class TestEngineBasicLoop:
             llm_client=llm,
             tools=reg,
             context=SimpleContextManager(),
-            state=JsonStateStore("/tmp/test_state3.json"),
+            state=JsonStateStore(str(tmp_path / "test_state3.json")),
             hooks=SimpleHookManager(),
             evaluator=TraceEvaluator(),
         )
@@ -79,9 +87,58 @@ class TestEngineBasicLoop:
         assert report["trajectory"][0]["status"] == "error"
         assert "ToolError(fail)" in report["trajectory"][0]["observation"]
 
+    def test_multiple_tool_calls_are_recorded_losslessly(self, mock_llm, tmp_path):
+        reg = DictToolRegistry()
+
+        @reg.tool
+        def echo(text: str):
+            """Echo back."""
+            return text
+
+        llm = mock_llm([
+            LLMResponse(
+                content="calling twice",
+                tool_calls=[
+                    ToolCall(name="echo", arguments={"text": "first"}),
+                    ToolCall(name="echo", arguments={"text": "second"}),
+                ],
+            ),
+            LLMResponse(content="done"),
+        ])
+        context = SimpleContextManager()
+        engine = NanoEngine(
+            llm_client=llm,
+            tools=reg,
+            context=context,
+            state=JsonStateStore(str(tmp_path / "state.json")),
+            hooks=SimpleHookManager(),
+            evaluator=TraceEvaluator(),
+        )
+
+        report = engine.run("echo twice", run_id="run_multi")
+        first_step = report["trajectory"][0]
+
+        assert [action["output"] for action in first_step["actions"]] == [
+            "first",
+            "second",
+        ]
+        assert len({action["call_id"] for action in first_step["actions"]}) == 2
+        # Legacy fields preserve the v1 last-call view.
+        assert first_step["action"]["arguments"] == {"text": "second"}
+        assert first_step["observation"] == "second"
+
+        tool_messages = [
+            message for message in context.get_full_context()
+            if message["role"] == "tool"
+        ]
+        assert [message["tool_call_id"] for message in tool_messages] == [
+            "call_multi_0_0",
+            "call_multi_0_1",
+        ]
+
 
 class TestEngineHooks:
-    def test_hooks_triggered(self, mock_llm):
+    def test_hooks_triggered(self, mock_llm, tmp_path):
         llm = mock_llm([LLMResponse(content="done")])
         hooks = SimpleHookManager()
         stages = []
@@ -92,7 +149,7 @@ class TestEngineHooks:
             llm_client=llm,
             tools=DictToolRegistry(),
             context=SimpleContextManager(),
-            state=JsonStateStore("/tmp/test_hooks.json"),
+            state=JsonStateStore(str(tmp_path / "test_hooks.json")),
             hooks=hooks,
             evaluator=TraceEvaluator(),
         )
@@ -101,14 +158,14 @@ class TestEngineHooks:
 
 
 class TestEngineContext:
-    def test_context_messages(self, mock_llm):
+    def test_context_messages(self, mock_llm, tmp_path):
         llm = mock_llm([LLMResponse(content="hello")])
         ctx = SimpleContextManager(system_prompt="be helpful")
         engine = NanoEngine(
             llm_client=llm,
             tools=DictToolRegistry(),
             context=ctx,
-            state=JsonStateStore("/tmp/test_ctx.json"),
+            state=JsonStateStore(str(tmp_path / "test_ctx.json")),
             hooks=SimpleHookManager(),
             evaluator=TraceEvaluator(),
         )
@@ -120,7 +177,7 @@ class TestEngineContext:
 
 
 class TestEngineMidLoopStop:
-    def test_mid_loop_stop(self, mock_llm):
+    def test_mid_loop_stop(self, mock_llm, tmp_path):
         """Engine stops when evaluator.should_stop returns True."""
 
         class StoppingEvaluator(BaseEvaluator):
@@ -157,7 +214,7 @@ class TestEngineMidLoopStop:
             llm_client=llm,
             tools=reg,
             context=SimpleContextManager(),
-            state=JsonStateStore("/tmp/test_mid_stop.json"),
+            state=JsonStateStore(str(tmp_path / "test_mid_stop.json")),
             hooks=SimpleHookManager(),
             evaluator=StoppingEvaluator(),
             max_steps=10,
@@ -165,7 +222,7 @@ class TestEngineMidLoopStop:
         report = engine.run("test")
         assert report["summary"]["total_steps"] == 2
 
-    def test_default_evaluator_no_stop(self, mock_llm):
+    def test_default_evaluator_no_stop(self, mock_llm, tmp_path):
         """Default TraceEvaluator never triggers early stop."""
         reg = DictToolRegistry()
 
@@ -183,7 +240,7 @@ class TestEngineMidLoopStop:
             llm_client=llm,
             tools=reg,
             context=SimpleContextManager(),
-            state=JsonStateStore("/tmp/test_no_stop.json"),
+            state=JsonStateStore(str(tmp_path / "test_no_stop.json")),
             hooks=SimpleHookManager(),
             evaluator=TraceEvaluator(),
             max_steps=3,
@@ -193,7 +250,7 @@ class TestEngineMidLoopStop:
 
 
 class TestEngineFinalEvaluation:
-    def test_final_evaluation_receives_user_query(self, mock_llm):
+    def test_final_evaluation_receives_user_query(self, mock_llm, tmp_path):
         """The original task must be available to query-aware evaluators."""
 
         class QueryCapturingEvaluator(TraceEvaluator):
@@ -210,7 +267,7 @@ class TestEngineFinalEvaluation:
             llm_client=mock_llm([LLMResponse(content="done")]),
             tools=DictToolRegistry(),
             context=SimpleContextManager(),
-            state=JsonStateStore("/tmp/test_final_evaluation.json"),
+            state=JsonStateStore(str(tmp_path / "test_final_evaluation.json")),
             hooks=SimpleHookManager(),
             evaluator=evaluator,
         )
@@ -218,3 +275,138 @@ class TestEngineFinalEvaluation:
         engine.run("fix the evaluator")
 
         assert evaluator.evaluated_query == "fix the evaluator"
+
+    def test_official_evaluation_controls_success(self, mock_llm, tmp_path):
+        class RejectingEvaluator(TraceEvaluator):
+            def evaluate_success(self, query, trajectory):
+                return EvaluationResult(
+                    achieved=False,
+                    confidence=1.0,
+                    explanation="The model stopped but did not finish the task",
+                )
+
+        engine = NanoEngine(
+            llm_client=mock_llm([LLMResponse(content="done")]),
+            tools=DictToolRegistry(),
+            context=SimpleContextManager(),
+            state=JsonStateStore(str(tmp_path / "state.json")),
+            hooks=SimpleHookManager(),
+            evaluator=RejectingEvaluator(),
+        )
+
+        report = engine.run("actually change a file")
+
+        assert report["trajectory"][0]["status"] == "terminated"
+        assert report["summary"]["success"] is False
+
+
+class TestEngineRunProtocol:
+    def test_each_run_has_isolated_evaluator_trajectory(self, mock_llm, tmp_path):
+        evaluator = TraceEvaluator()
+        engine = NanoEngine(
+            llm_client=mock_llm([
+                LLMResponse(content="first done"),
+                LLMResponse(content="second done"),
+            ]),
+            tools=DictToolRegistry(),
+            context=SimpleContextManager(),
+            state=JsonStateStore(str(tmp_path / "state.json")),
+            hooks=SimpleHookManager(),
+            evaluator=evaluator,
+            session_id="session_test",
+        )
+
+        first = engine.run("first", run_id="run_first")
+        second = engine.run("second", run_id="run_second")
+
+        assert first["summary"]["total_steps"] == 1
+        assert second["summary"]["total_steps"] == 1
+        assert second["run"]["session_id"] == "session_test"
+
+    def test_events_and_checkpoint_describe_completed_run(self, mock_llm, tmp_path):
+        state = JsonStateStore(str(tmp_path / "state.json"))
+        published = []
+
+        class Sink:
+            def publish(self, event):
+                published.append(event)
+
+        engine = NanoEngine(
+            llm_client=mock_llm([LLMResponse(content="done")]),
+            tools=DictToolRegistry(),
+            context=SimpleContextManager(),
+            state=state,
+            hooks=SimpleHookManager(),
+            evaluator=TraceEvaluator(),
+            event_sink=Sink(),
+        )
+
+        report = engine.run("hello", run_id="run_events")
+        event_types = [event["type"] for event in report["events"]]
+        checkpoint = state.load_state()
+
+        assert event_types[0] == "run_started"
+        assert event_types[-1] == "run_completed"
+        assert event_types == [event.type for event in published]
+        assert checkpoint["run_id"] == "run_events"
+        assert checkpoint["status"] == "completed"
+        assert checkpoint["trajectory"][0]["status"] == "terminated"
+
+    def test_max_steps_is_a_distinct_terminal_status(self, mock_llm, tmp_path):
+        reg = DictToolRegistry()
+
+        @reg.tool
+        def noop():
+            """No-op."""
+            return "ok"
+
+        engine = NanoEngine(
+            llm_client=mock_llm([
+                LLMResponse(
+                    content="still working",
+                    tool_calls=[ToolCall(name="noop", arguments={})],
+                )
+            ]),
+            tools=reg,
+            context=SimpleContextManager(),
+            state=JsonStateStore(str(tmp_path / "state.json")),
+            hooks=SimpleHookManager(),
+            evaluator=TraceEvaluator(),
+            max_steps=1,
+        )
+
+        report = engine.run("keep going")
+
+        assert report["run"]["status"] == "max_steps"
+        assert report["run"]["stop_reason"] == "Maximum steps reached"
+
+    def test_failure_event_and_checkpoint_are_saved(self, tmp_path):
+        state = JsonStateStore(str(tmp_path / "state.json"))
+        published = []
+
+        class FailingLLM:
+            def chat(self, messages, tools=None):
+                raise RuntimeError("provider unavailable")
+
+        class Sink:
+            def publish(self, event):
+                published.append(event)
+
+        engine = NanoEngine(
+            llm_client=FailingLLM(),
+            tools=DictToolRegistry(),
+            context=SimpleContextManager(),
+            state=state,
+            hooks=SimpleHookManager(),
+            evaluator=TraceEvaluator(),
+            event_sink=Sink(),
+        )
+
+        with pytest.raises(RuntimeError, match="provider unavailable"):
+            engine.run("hello", run_id="run_failure")
+
+        checkpoint = state.load_state()
+        assert published[-1].type == "run_failed"
+        assert checkpoint["run_id"] == "run_failure"
+        assert checkpoint["status"] == "failed"
+        assert "provider unavailable" in checkpoint["error"]

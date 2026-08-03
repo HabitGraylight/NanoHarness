@@ -29,3 +29,32 @@ class TestSimpleContextManager:
         assert len(ctx.get_full_context()) == 2
         ctx.reset()
         assert ctx.get_full_context() == []
+
+    def test_preserves_explicit_tool_call_id(self):
+        from nanoharness.core.schema import ToolCall
+
+        ctx = SimpleContextManager()
+        ctx.add_message(
+            AgentMessage(
+                role="assistant",
+                content="",
+                tool_calls=[
+                    ToolCall(
+                        name="read",
+                        arguments={"path": "x.py"},
+                        call_id="provider_call_1",
+                    )
+                ],
+            )
+        )
+        ctx.add_message(
+            AgentMessage(
+                role="tool",
+                content="content",
+                tool_call_id="provider_call_1",
+            )
+        )
+
+        messages = ctx.get_full_context()
+        assert messages[0]["tool_calls"][0]["id"] == "provider_call_1"
+        assert messages[1]["tool_call_id"] == "provider_call_1"

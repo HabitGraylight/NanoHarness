@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-535%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-548%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -82,7 +82,7 @@ The kernel provides **only** these six interfaces and one orchestration engine. 
 ```
 nanoharness/
   core/                  # Kernel: interfaces + engine
-    schema.py            #   ToolCall, LLMResponse, AgentMessage, StepResult, StopSignal, EvaluationResult
+    schema.py            #   Messages, tool executions, run/checkpoint, events, evaluation
     base.py              #   ETCSLV ABCs, LLMProtocol, HookStage
     engine.py            #   NanoEngine (with mid-loop evaluation)
     prompt.py            #   PromptManager (YAML template loader)
@@ -98,8 +98,8 @@ configs/
   scripts/               # Shell-script tools (auto-discovered, 27 tools)
 examples/
   coding_agent/          # Full-featured coding agent reference (434 tests)
-  nano_loop/             # Evidence-gated Loop Engineering example (26 tests)
-tests/                   # 75 kernel tests
+  nano_loop/             # Evidence-gated Loop Engineering example (27 tests)
+tests/                   # 87 kernel tests
 ```
 
 ---
@@ -158,6 +158,24 @@ No memory, no prompt rendering, no permission logic inside the engine. All of th
 
 ---
 
+## Core Protocol v2
+
+Core Protocol v2 preserves `NanoEngine.run(query)` and the existing dictionary
+report while adding:
+
+- stable run/session identity, protocol version, and terminal run status;
+- provider ToolCall IDs with deterministic engine-generated fallback IDs;
+- lossless multi-tool traces through `StepResult.actions`;
+- ordered `HarnessEvent` streams and an optional `EventSinkProtocol`;
+- crash-readable `RunCheckpoint` snapshots containing query, trajectory, stop reason, and errors;
+- run-local evaluator trajectories while context may remain session-local;
+- `EvaluationResult.achieved` as the official success verdict.
+
+The legacy `StepResult.action` and `observation` fields remain available and
+represent the final tool execution in a step.
+
+---
+
 ## Tools
 
 Tools satisfy `BaseToolRegistry` with two methods: `get_tool_schemas()` and `call(name, args)`.
@@ -193,19 +211,19 @@ See `examples/nano_loop/` for an outer-loop control plane that repeatedly create
 ## Testing
 
 ```bash
-# Kernel tests (75)
+# Kernel tests (87)
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # Coding agent tests (434: 291 UT + 143 ST)
 cd examples/coding_agent
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
-# NanoLoop tests (26)
+# NanoLoop tests (27)
 cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**Total: 535 tests.** Kernel tests require only the kernel dependencies and pytest.
+**Total: 548 tests.** Kernel tests require only the kernel dependencies and pytest.
 
 ---
 

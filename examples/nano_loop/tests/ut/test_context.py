@@ -28,3 +28,31 @@ def test_context_reset_restores_system_prompt():
     context.add_message(AgentMessage(role="user", content="hello"))
     context.reset()
     assert context.get_full_context() == [{"role": "system", "content": "system"}]
+
+
+def test_context_preserves_explicit_tool_call_id():
+    context = LoopContextManager("system")
+    context.add_message(
+        AgentMessage(
+            role="assistant",
+            content="",
+            tool_calls=[
+                ToolCall(
+                    name="file_read",
+                    arguments={"path": "a.py"},
+                    call_id="provider_call_1",
+                )
+            ],
+        )
+    )
+    context.add_message(
+        AgentMessage(
+            role="tool",
+            content="content",
+            tool_call_id="provider_call_1",
+        )
+    )
+
+    messages = context.get_full_context()
+    assert messages[1]["tool_calls"][0]["id"] == "provider_call_1"
+    assert messages[2]["tool_call_id"] == "provider_call_1"

@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
 
-from nanoharness.core.schema import LLMResponse, ToolCall
+from nanoharness.core.schema import LLMResponse, TokenUsage, ToolCall
 
 
 class DetailedLLMResponse(LLMResponse):
@@ -45,11 +45,23 @@ class OpenAIAdapter:
                 ToolCall(
                     name=tc.function.name,
                     arguments=json.loads(tc.function.arguments),
+                    call_id=tc.id if isinstance(getattr(tc, "id", None), str) else None,
                 )
                 for tc in choice.message.tool_calls
             ]
+        usage = None
+        usage_data = getattr(resp, "usage", None)
+        if usage_data and isinstance(getattr(usage_data, "total_tokens", None), int):
+            usage = TokenUsage(
+                input_tokens=usage_data.prompt_tokens or 0,
+                output_tokens=usage_data.completion_tokens or 0,
+                total_tokens=usage_data.total_tokens or 0,
+            )
         return DetailedLLMResponse(
             content=choice.message.content or "",
             tool_calls=tool_calls,
+            model=resp.model if isinstance(getattr(resp, "model", None), str) else None,
+            finish_reason=choice.finish_reason,
+            usage=usage,
             stop_reason=choice.finish_reason or "end_turn",
         )

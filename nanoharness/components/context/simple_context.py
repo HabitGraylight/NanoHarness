@@ -49,8 +49,10 @@ def _format_messages(messages: List[AgentMessage]) -> List[Dict]:
             pending_ids = []
             formatted_calls = []
             for tc in cleaned["tool_calls"]:
-                call_id = f"call_{call_counter}"
-                call_counter += 1
+                call_id = tc.get("call_id")
+                if not call_id:
+                    call_id = f"call_{call_counter}"
+                    call_counter += 1
                 pending_ids.append(call_id)
                 # arguments must be a JSON string in the API
                 args = tc["arguments"]
@@ -67,8 +69,12 @@ def _format_messages(messages: List[AgentMessage]) -> List[Dict]:
             cleaned["tool_calls"] = formatted_calls
 
         elif role == "tool":
-            # Assign tool_call_id matching the preceding assistant's tool calls
-            if pending_ids:
+            # Prefer the engine/provider ID; infer one for v1 messages.
+            explicit_id = cleaned.get("tool_call_id")
+            if explicit_id:
+                if explicit_id in pending_ids:
+                    pending_ids.remove(explicit_id)
+            elif pending_ids:
                 cleaned["tool_call_id"] = pending_ids.pop(0)
             else:
                 cleaned["tool_call_id"] = f"call_orphan_{call_counter}"

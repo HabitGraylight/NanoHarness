@@ -1,4 +1,19 @@
-from nanoharness.core.schema import AgentMessage, EvaluationResult, LLMResponse, StepResult, StopSignal, ToolCall
+from nanoharness.core.schema import (
+    AgentMessage,
+    CORE_PROTOCOL_VERSION,
+    EventType,
+    EvaluationResult,
+    HarnessEvent,
+    LLMResponse,
+    RunCheckpoint,
+    RunContext,
+    RunStatus,
+    StepResult,
+    StopSignal,
+    ToolCall,
+    ToolExecution,
+    ToolExecutionStatus,
+)
 
 
 class TestToolCall:
@@ -11,6 +26,10 @@ class TestToolCall:
         tc = ToolCall(name="f", arguments={"x": 1})
         d = tc.model_dump()
         assert d == {"name": "f", "arguments": {"x": 1}}
+
+    def test_call_id_is_serialized_when_present(self):
+        tc = ToolCall(name="f", arguments={}, call_id="call_123")
+        assert tc.model_dump()["call_id"] == "call_123"
 
 
 class TestLLMResponse:
@@ -58,6 +77,18 @@ class TestStepResult:
         s = StepResult(step_id=0, thought="t", stop_signal=sig)
         assert s.stop_signal.should_stop is True
 
+    def test_actions_capture_complete_tool_trace(self):
+        execution = ToolExecution(
+            call_id="call_1",
+            name="read",
+            arguments={"path": "x.py"},
+            status=ToolExecutionStatus.SUCCESS,
+            output="content",
+        )
+        s = StepResult(step_id=0, thought="read", actions=[execution])
+        assert s.actions[0].call_id == "call_1"
+        assert s.actions[0].output == "content"
+
 
 class TestStopSignal:
     def test_defaults(self):
@@ -84,3 +115,32 @@ class TestEvaluationResult:
         r = EvaluationResult(achieved=True, confidence=0.9, explanation="Done", evidence=["obs1"])
         assert r.achieved is True
         assert len(r.evidence) == 1
+
+
+class TestRunProtocol:
+    def test_run_context_has_stable_identity_and_version(self):
+        run = RunContext(query="fix it", max_steps=5)
+        assert run.run_id.startswith("run_")
+        assert run.session_id.startswith("session_")
+        assert run.protocol_version == CORE_PROTOCOL_VERSION
+
+    def test_checkpoint_serializes_as_json(self):
+        checkpoint = RunCheckpoint(
+            run_id="run_1",
+            session_id="session_1",
+            query="fix it",
+            status=RunStatus.COMPLETED,
+        )
+        dumped = checkpoint.model_dump(mode="json")
+        assert dumped["status"] == "completed"
+        assert isinstance(dumped["updated_at"], str)
+
+    def test_harness_event_is_ordered_and_typed(self):
+        event = HarnessEvent(
+            run_id="run_1",
+            session_id="session_1",
+            sequence=3,
+            type=EventType.TOOL_COMPLETED,
+        )
+        assert event.sequence == 3
+        assert event.type == "tool_completed"

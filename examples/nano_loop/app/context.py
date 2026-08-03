@@ -34,7 +34,7 @@ class LoopContextManager(BaseContextManager):
                 pending_ids = []
                 formatted = []
                 for call_index, tool_call in enumerate(data["tool_calls"]):
-                    call_id = f"call_{message_index}_{call_index}"
+                    call_id = tool_call.get("call_id") or f"call_{message_index}_{call_index}"
                     pending_ids.append(call_id)
                     formatted.append(
                         {
@@ -51,11 +51,16 @@ class LoopContextManager(BaseContextManager):
                     )
                 data["tool_calls"] = formatted
             elif role == "tool":
-                data["tool_call_id"] = (
-                    pending_ids.pop(0)
-                    if pending_ids
-                    else f"call_orphan_{message_index}"
-                )
+                explicit_id = data.get("tool_call_id")
+                if explicit_id:
+                    if explicit_id in pending_ids:
+                        pending_ids.remove(explicit_id)
+                else:
+                    data["tool_call_id"] = (
+                        pending_ids.pop(0)
+                        if pending_ids
+                        else f"call_orphan_{message_index}"
+                    )
 
             result.append(data)
         return result

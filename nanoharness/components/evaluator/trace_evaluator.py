@@ -34,7 +34,10 @@ class TraceEvaluator(BaseEvaluator):
 
         return {
             "summary": {
-                "success": any(s.status == "terminated" for s in self.trajectory),
+                # evaluate_success is the official verdict. A model stopping
+                # without tools only means the loop terminated, not that the
+                # user's goal was necessarily achieved.
+                "success": evaluation.achieved,
                 "total_steps": total_steps,
                 "avg_thought_length": sum(len(s.thought) for s in self.trajectory) / total_steps if total_steps > 0 else 0,
                 "evaluation": evaluation.model_dump(),
