@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-548%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-561%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -73,7 +73,7 @@ The kernel provides **only** these six interfaces and one orchestration engine. 
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Design principle:** The engine has zero knowledge of prompts, memory, permissions, or I/O. All behavior is injected. This makes the kernel safe to share across different agent applications.
+**Design principle:** The engine has no application-specific knowledge of prompts, memory, policy rules, approval UI, sandbox implementation, or output UI. It only coordinates injected protocols, making the kernel safe to share across different agent applications.
 
 ---
 
@@ -85,12 +85,14 @@ nanoharness/
     schema.py            #   Messages, tool executions, run/checkpoint, events, evaluation
     base.py              #   ETCSLV ABCs, LLMProtocol, HookStage
     engine.py            #   NanoEngine (with mid-loop evaluation)
+    runtime.py           #   RunControl (cooperative cancellation + steering)
     prompt.py            #   PromptManager (YAML template loader)
   components/            # Minimal ETCSLV implementations
     tools/               #   T: DictToolRegistry, ScriptToolRegistry
     context/             #   C: SimpleContextManager
     state/               #   S: JsonStateStore
     hooks/               #   L: SimpleHookManager
+    lifecycle/           #   Policy, approval, executor, and event components
     evaluator/           #   V: TraceEvaluator (with should_stop + evaluate_success)
   utils/                 # get_logger, count_tokens
 configs/
@@ -99,7 +101,7 @@ configs/
 examples/
   coding_agent/          # Full-featured coding agent reference (434 tests)
   nano_loop/             # Evidence-gated Loop Engineering example (27 tests)
-tests/                   # 87 kernel tests
+tests/                   # 100 kernel tests
 ```
 
 ---
@@ -142,7 +144,8 @@ NanoEngine.run(query)
           ├─ L.trigger(ON_THOUGHT_READY)
           │
           ├─ Act:    for each tool_call:
-          │            optional permission gate → T.call(name, args)
+          │            PolicyDecision → optional ApprovalBroker
+          │            → ToolExecutor (registry / sandbox / remote)
           │            C.add_message(observation)
           │
           ├─ S.save_state()
@@ -154,7 +157,7 @@ NanoEngine.run(query)
      └─ L.trigger(ON_TASK_END)
 ```
 
-No memory, no prompt rendering, no permission logic inside the engine. All of that flows through injected components and hooks.
+No application policy rules, approval UI, or sandbox logic live inside the engine. All of that flows through injected protocol implementations.
 
 ---
 
@@ -173,6 +176,20 @@ report while adding:
 
 The legacy `StepResult.action` and `observation` fields remain available and
 represent the final tool execution in a step.
+
+## Lifecycle Policy & Async Runtime
+
+Protocol v2.1 adds explicit boundaries around the tool lifecycle:
+
+- `ToolPolicyProtocol` returns a typed `PolicyDecision` for pre/post-tool stages;
+- `ApprovalBrokerProtocol` handles interactive or remote approval separately from policy;
+- `ToolExecutorProtocol` is the replaceable boundary for local, sandboxed, or remote execution;
+- `CompositeToolPolicy` combines permission and hook policies with deterministic precedence;
+- `EventBus`, `RedactingEventSink`, `JsonlEventSink`, and `ConsoleEventSink` form a composable real-time observability pipeline;
+- `NanoEngine.arun()` and `NanoEngine.astream()` provide async report and live-event surfaces;
+- `RunControl` provides cooperative cancellation and steering at safe step boundaries.
+
+The legacy `permissions=` and `tool_hooks=` constructor arguments remain supported. The Coding Agent builder now uses the typed policy and approval path.
 
 ---
 
@@ -211,7 +228,7 @@ See `examples/nano_loop/` for an outer-loop control plane that repeatedly create
 ## Testing
 
 ```bash
-# Kernel tests (87)
+# Kernel tests (100)
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # Coding agent tests (434: 291 UT + 143 ST)
@@ -223,7 +240,7 @@ cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**Total: 548 tests.** Kernel tests require only the kernel dependencies and pytest.
+**Total: 561 tests.** Kernel tests require only the kernel dependencies and pytest.
 
 ---
 

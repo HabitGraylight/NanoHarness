@@ -4,11 +4,16 @@ from typing import Any, Dict, List, Optional, Protocol
 
 from nanoharness.core.schema import (
     AgentMessage,
+    ApprovalResult,
     EvaluationResult,
     HarnessEvent,
     LLMResponse,
+    PolicyDecision,
+    PolicyStage,
     StepResult,
     StopSignal,
+    ToolExecution,
+    ToolRequest,
 )
 
 
@@ -32,6 +37,36 @@ class EventSinkProtocol(Protocol):
     """Optional observer for the ordered events emitted by a run."""
 
     def publish(self, event: HarnessEvent) -> None:
+        ...
+
+
+class ToolPolicyProtocol(Protocol):
+    """Typed policy boundary for pre- and post-tool lifecycle decisions."""
+
+    def decide(
+        self,
+        stage: PolicyStage,
+        request: ToolRequest,
+        execution: Optional[ToolExecution] = None,
+    ) -> PolicyDecision:
+        ...
+
+
+class ApprovalBrokerProtocol(Protocol):
+    """Resolve an explicit approval request without embedding UI in policy."""
+
+    def request_approval(
+        self,
+        request: ToolRequest,
+        decision: PolicyDecision,
+    ) -> ApprovalResult:
+        ...
+
+
+class ToolExecutorProtocol(Protocol):
+    """Execution boundary that may apply a sandbox or remote worker."""
+
+    def execute(self, request: ToolRequest) -> Any:
         ...
 
 

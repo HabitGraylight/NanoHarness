@@ -1,4 +1,5 @@
 from nanoharness.core.base import (
+    ApprovalBrokerProtocol,
     BaseComponent,
     BaseContextManager,
     BaseEvaluator,
@@ -8,16 +9,24 @@ from nanoharness.core.base import (
     EventSinkProtocol,
     HookStage,
     LLMProtocol,
+    ToolExecutorProtocol,
+    ToolPolicyProtocol,
 )
 from nanoharness.core.engine import NanoEngine
 from nanoharness.core.prompt import PromptManager
+from nanoharness.core.runtime import RunControl
 from nanoharness.core.schema import (
     AgentMessage,
+    ApprovalResult,
+    ApprovalStatus,
     CORE_PROTOCOL_VERSION,
     EventType,
     EvaluationResult,
     HarnessEvent,
     LLMResponse,
+    PolicyDecision,
+    PolicyOutcome,
+    PolicyStage,
     RunCheckpoint,
     RunContext,
     RunStatus,
@@ -26,5 +35,6 @@ from nanoharness.core.schema import (
     ToolCall,
     ToolExecution,
     ToolExecutionStatus,
+    ToolRequest,
     TokenUsage,
 )

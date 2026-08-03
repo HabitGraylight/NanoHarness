@@ -12,7 +12,7 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 
 
-CORE_PROTOCOL_VERSION = "2.0"
+CORE_PROTOCOL_VERSION = "2.1"
 
 
 def _utc_now() -> datetime:
@@ -74,6 +74,7 @@ class ToolExecutionStatus(str, Enum):
     ERROR = "error"
     DENIED = "denied"
     BLOCKED = "blocked"
+    CANCELLED = "cancelled"
 
 
 class ToolExecution(BaseModel):
@@ -86,6 +87,61 @@ class ToolExecution(BaseModel):
     output: Optional[str] = None
     error: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ToolRequest(BaseModel):
+    """Run-aware input presented to policy, approval, and execution layers."""
+
+    call_id: str
+    name: str
+    arguments: Dict[str, Any] = Field(default_factory=dict)
+    run_id: str
+    session_id: str
+    step_id: int
+
+
+class PolicyStage(str, Enum):
+    BEFORE_TOOL = "before_tool"
+    AFTER_TOOL = "after_tool"
+
+
+class PolicyOutcome(str, Enum):
+    ALLOW = "allow"
+    DENY = "deny"
+    REQUIRE_APPROVAL = "require_approval"
+
+
+class PolicyDecision(BaseModel):
+    """Provider-neutral lifecycle decision returned by a tool policy.
+
+    ``context_injection`` adds context before execution. ``output_suffix``
+    augments a successful observation after execution. Both fields replace
+    app-specific integer hook actions with an inspectable typed contract.
+    """
+
+    outcome: PolicyOutcome = PolicyOutcome.ALLOW
+    reason: str = ""
+    source: str = ""
+    context_injection: Optional[str] = None
+    output_suffix: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ApprovalStatus(str, Enum):
+    APPROVED = "approved"
+    DENIED = "denied"
+
+
+class ApprovalResult(BaseModel):
+    """Explicit response from an approval broker."""
+
+    status: ApprovalStatus
+    reason: str = ""
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+    @property
+    def approved(self) -> bool:
+        return self.status == ApprovalStatus.APPROVED
 
 
 class StopSignal(BaseModel):
@@ -129,6 +185,7 @@ class RunStatus(str, Enum):
     RUNNING = "running"
     COMPLETED = "completed"
     STOPPED = "stopped"
+    CANCELLED = "cancelled"
     MAX_STEPS = "max_steps"
     FAILED = "failed"
 
@@ -162,12 +219,18 @@ class RunCheckpoint(BaseModel):
 class EventType(str, Enum):
     RUN_STARTED = "run_started"
     RUN_COMPLETED = "run_completed"
+    RUN_CANCELLED = "run_cancelled"
     RUN_FAILED = "run_failed"
+    STEERING_APPLIED = "steering_applied"
     STEP_STARTED = "step_started"
     STEP_COMPLETED = "step_completed"
     MODEL_REQUESTED = "model_requested"
     MODEL_RESPONDED = "model_responded"
     TOOL_REQUESTED = "tool_requested"
+    POLICY_EVALUATED = "policy_evaluated"
+    APPROVAL_REQUESTED = "approval_requested"
+    APPROVAL_RESOLVED = "approval_resolved"
+    TOOL_EXECUTION_STARTED = "tool_execution_started"
     TOOL_COMPLETED = "tool_completed"
     TOOL_FAILED = "tool_failed"
     TOOL_DENIED = "tool_denied"

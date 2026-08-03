@@ -12,6 +12,13 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 from nanoharness.components.hooks.simple_hooks import SimpleHookManager
 from nanoharness.core.base import BaseComponent, HookStage
+from nanoharness.core.schema import (
+    PolicyDecision,
+    PolicyOutcome,
+    PolicyStage,
+    ToolExecution,
+    ToolRequest,
+)
 
 
 # ── Tool hook types (app-layer, engine duck-types these) ──
@@ -59,6 +66,66 @@ class ToolHookRunner(BaseComponent):
                 if decision is not None:
                     return decision
         return None
+
+    def decide(
+        self,
+        stage: PolicyStage,
+        request: ToolRequest,
+        execution: Optional[ToolExecution] = None,
+    ) -> PolicyDecision:
+        """Expose app hooks through the shared typed policy contract."""
+        if stage == PolicyStage.BEFORE_TOOL:
+            decision = self.run_pre(request.name, request.arguments)
+            if decision is None:
+                return PolicyDecision(
+                    outcome=PolicyOutcome.ALLOW,
+                    source="coding_tool_hooks",
+                )
+            if decision.action == HookAction.BLOCK:
+                return PolicyDecision(
+                    outcome=PolicyOutcome.DENY,
+                    reason=(
+                        decision.message
+                        or f"Tool '{request.name}' blocked by hook"
+                    ),
+                    source="coding_tool_hooks",
+                    metadata={"execution_status": "blocked"},
+                )
+            return PolicyDecision(
+                outcome=PolicyOutcome.ALLOW,
+                source="coding_tool_hooks",
+                context_injection=(
+                    decision.message
+                    if decision.action == HookAction.INJECT
+                    else None
+                ),
+            )
+
+        result = execution.output if execution and execution.output else ""
+        decision = self.run_post(request.name, request.arguments, result)
+        if decision is None:
+            return PolicyDecision(
+                outcome=PolicyOutcome.ALLOW,
+                source="coding_tool_hooks",
+            )
+        if decision.action == HookAction.BLOCK:
+            return PolicyDecision(
+                outcome=PolicyOutcome.DENY,
+                reason=(
+                    decision.message
+                    or f"Result from '{request.name}' blocked by hook"
+                ),
+                source="coding_tool_hooks",
+            )
+        return PolicyDecision(
+            outcome=PolicyOutcome.ALLOW,
+            source="coding_tool_hooks",
+            output_suffix=(
+                decision.message
+                if decision.action == HookAction.INJECT
+                else None
+            ),
+        )
 
     def reset(self):
         self._pre_hooks.clear()

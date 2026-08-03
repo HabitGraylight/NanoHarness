@@ -7,6 +7,7 @@ The kernel is policy-free — all behavior lives in this app layer.
 import os
 
 from nanoharness.components.context.simple_context import SimpleContextManager
+from nanoharness.components.lifecycle import CompositeToolPolicy
 from app.adapters import OpenAIAdapter
 from app.background import BackgroundExecutor, register_background_tools
 from app.coding_evaluator import CodingAgentEvaluator
@@ -22,7 +23,7 @@ from nanoharness.core.schema import AgentMessage
 from app.context import ManagedContext
 from app.hooks import build_hooks, build_tool_hooks
 from app.memory import FileMemoryManager
-from app.permissions import build_permissions
+from app.permissions import TerminalApprovalBroker, build_permissions
 from app.prompt_builder import SystemPromptBuilder
 from app.skills import SkillRegistry, register_skill_tool
 from app.subagent import register_task_tool
@@ -157,8 +158,8 @@ def build_coding_engine(
         state=JsonStateStore(os.path.join(SANDBOX, "run_state.json")),
         hooks=hooks,
         evaluator=CodingAgentEvaluator(llm_client=raw_llm),
-        permissions=perms,
-        tool_hooks=tool_hooks,
+        policy=CompositeToolPolicy([perms, tool_hooks]),
+        approval_broker=TerminalApprovalBroker(),
         max_steps=max_steps,
     )
 

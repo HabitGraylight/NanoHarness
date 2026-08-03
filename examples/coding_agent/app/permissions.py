@@ -25,6 +25,15 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Callable, Dict, List, Optional
 
+from nanoharness.core.schema import (
+    ApprovalResult,
+    ApprovalStatus,
+    PolicyDecision,
+    PolicyOutcome,
+    PolicyStage,
+    ToolExecution,
+    ToolRequest,
+)
 
 # ── App-layer types (engine duck-types these) ──
 
@@ -130,6 +139,36 @@ class PermissionGate(BasePermissionManager):
 
         return None  # Allowed
 
+    def decide(
+        self,
+        stage: PolicyStage,
+        request: ToolRequest,
+        execution: Optional[ToolExecution] = None,
+    ) -> PolicyDecision:
+        """Typed M2 policy interface; unlike enforce(), this performs no I/O."""
+        if stage == PolicyStage.AFTER_TOOL:
+            return PolicyDecision(
+                outcome=PolicyOutcome.ALLOW,
+                source="coding_permission_gate",
+            )
+
+        level = self.check(request.name, request.arguments)
+        if level == PermissionLevel.ALLOW:
+            outcome = PolicyOutcome.ALLOW
+            reason = "Matched allow policy"
+        elif level == PermissionLevel.CONFIRM:
+            outcome = PolicyOutcome.REQUIRE_APPROVAL
+            reason = f"Tool '{request.name}' requires user approval"
+        else:
+            outcome = PolicyOutcome.DENY
+            reason = f"Permission denied for tool '{request.name}'"
+        return PolicyDecision(
+            outcome=outcome,
+            reason=reason,
+            source="coding_permission_gate",
+            metadata={"permission_level": level.value, "mode": self._mode.value},
+        )
+
     # ── Helpers ──
 
     @staticmethod
@@ -148,6 +187,29 @@ def _default_terminal_approve(tool_name: str, args: Dict) -> bool:
     print(msg, end="")
     response = input().strip().lower()
     return response == "y"
+
+
+class TerminalApprovalBroker:
+    """Keep terminal interaction outside the permission policy itself."""
+
+    def request_approval(
+        self,
+        request: ToolRequest,
+        decision: PolicyDecision,
+    ) -> ApprovalResult:
+        approved = _default_terminal_approve(request.name, request.arguments)
+        return ApprovalResult(
+            status=(
+                ApprovalStatus.APPROVED
+                if approved
+                else ApprovalStatus.DENIED
+            ),
+            reason=(
+                "Approved by terminal user"
+                if approved
+                else f"Tool '{request.name}' not approved by user"
+            ),
+        )
 
 
 # ── App-level policy ──

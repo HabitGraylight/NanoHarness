@@ -1,10 +1,12 @@
 """Policy-light orchestration for the NanoHarness ETCSLV kernel."""
 
+import asyncio
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, AsyncIterator, Dict, Optional
 from uuid import uuid4
 
 from nanoharness.core.base import (
+    ApprovalBrokerProtocol,
     BaseContextManager,
     BaseEvaluator,
     BaseHookManager,
@@ -13,11 +15,19 @@ from nanoharness.core.base import (
     EventSinkProtocol,
     HookStage,
     LLMProtocol,
+    ToolExecutorProtocol,
+    ToolPolicyProtocol,
 )
+from nanoharness.core.runtime import RunControl
 from nanoharness.core.schema import (
     AgentMessage,
+    ApprovalResult,
+    ApprovalStatus,
     EventType,
     HarnessEvent,
+    PolicyDecision,
+    PolicyOutcome,
+    PolicyStage,
     RunCheckpoint,
     RunContext,
     RunStatus,
@@ -25,7 +35,25 @@ from nanoharness.core.schema import (
     ToolCall,
     ToolExecution,
     ToolExecutionStatus,
+    ToolRequest,
 )
+
+
+class _FanoutEventSink:
+    """Publish to every sink even when one observer fails."""
+
+    def __init__(self, *sinks: EventSinkProtocol):
+        self._sinks = [sink for sink in sinks if sink is not None]
+
+    def publish(self, event: HarnessEvent) -> None:
+        errors = []
+        for sink in self._sinks:
+            try:
+                sink.publish(event)
+            except Exception as exc:
+                errors.append(f"{type(exc).__name__}: {exc}")
+        if errors:
+            raise RuntimeError("; ".join(errors))
 
 
 class _RunEventRecorder:
@@ -99,6 +127,9 @@ class NanoEngine:
         tool_hooks=None,
         event_sink: Optional[EventSinkProtocol] = None,
         session_id: Optional[str] = None,
+        policy: Optional[ToolPolicyProtocol] = None,
+        approval_broker: Optional[ApprovalBrokerProtocol] = None,
+        executor: Optional[ToolExecutorProtocol] = None,
     ):
         self.llm = llm_client
         self.tools = tools
@@ -111,6 +142,9 @@ class NanoEngine:
         self.tool_hooks = tool_hooks
         self.event_sink = event_sink
         self.session_id = session_id or f"session_{uuid4().hex}"
+        self.policy = policy
+        self.approval_broker = approval_broker
+        self.executor = executor
 
     def run(
         self,
@@ -118,6 +152,8 @@ class NanoEngine:
         *,
         run_id: Optional[str] = None,
         session_id: Optional[str] = None,
+        control: Optional[RunControl] = None,
+        event_sink: Optional[EventSinkProtocol] = None,
     ) -> Dict:
         """Execute one isolated run within this engine's conversation session."""
 
@@ -127,7 +163,8 @@ class NanoEngine:
             query=user_query,
             max_steps=self.max_steps,
         )
-        recorder = _RunEventRecorder(run_context, self.event_sink)
+        active_sink = self._combine_event_sinks(self.event_sink, event_sink)
+        recorder = _RunEventRecorder(run_context, active_sink)
         trajectory: list[StepResult] = []
         run_status = RunStatus.RUNNING
         stop_reason = ""
@@ -149,6 +186,22 @@ class NanoEngine:
             self.context.add_message(AgentMessage(role="user", content=user_query))
 
             for i in range(self.max_steps):
+                if control and control.cancelled:
+                    run_status = RunStatus.CANCELLED
+                    stop_reason = control.cancel_reason
+                    break
+
+                if control:
+                    for steering_message in control.drain_steering():
+                        self.context.add_message(
+                            AgentMessage(role="user", content=steering_message)
+                        )
+                        recorder.emit(
+                            EventType.STEERING_APPLIED,
+                            step_id=i,
+                            data={"message": steering_message},
+                        )
+
                 step_res = self._execute_step(i, recorder)
 
                 self.evaluator.log_step(step_res)
@@ -157,7 +210,10 @@ class NanoEngine:
                 # Mid-loop evaluation is part of the completed step so hooks,
                 # state, and events all observe the same stop signal.
                 stop_signal = self.evaluator.should_stop(trajectory)
-                if stop_signal.should_stop:
+                if control and control.cancelled:
+                    run_status = RunStatus.CANCELLED
+                    stop_reason = control.cancel_reason
+                elif stop_signal.should_stop:
                     step_res.stop_signal = stop_signal
                     run_status = RunStatus.STOPPED
                     stop_reason = stop_signal.reason
@@ -178,7 +234,11 @@ class NanoEngine:
                     stop_reason=stop_reason,
                 )
 
-                if run_status in {RunStatus.STOPPED, RunStatus.COMPLETED}:
+                if run_status in {
+                    RunStatus.STOPPED,
+                    RunStatus.COMPLETED,
+                    RunStatus.CANCELLED,
+                }:
                     break
 
             if run_status == RunStatus.RUNNING:
@@ -206,7 +266,11 @@ class NanoEngine:
 
             self.hooks.trigger(HookStage.ON_TASK_END, report)
             recorder.emit(
-                EventType.RUN_COMPLETED,
+                (
+                    EventType.RUN_CANCELLED
+                    if run_status == RunStatus.CANCELLED
+                    else EventType.RUN_COMPLETED
+                ),
                 data={
                     "status": run_status.value,
                     "success": bool(report["summary"].get("success", False)),
@@ -244,6 +308,89 @@ class NanoEngine:
             except Exception:
                 pass
             raise
+
+    async def arun(
+        self,
+        user_query: str,
+        *,
+        run_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        control: Optional[RunControl] = None,
+        event_sink: Optional[EventSinkProtocol] = None,
+    ) -> Dict:
+        """Run the synchronous engine in a worker thread.
+
+        The same cooperative ``RunControl`` works for both sync and async
+        callers. A single engine instance should still execute one run at a
+        time because its Context and Evaluator are intentionally stateful.
+        """
+
+        return await asyncio.to_thread(
+            self.run,
+            user_query,
+            run_id=run_id,
+            session_id=session_id,
+            control=control,
+            event_sink=event_sink,
+        )
+
+    async def astream(
+        self,
+        user_query: str,
+        *,
+        run_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        control: Optional[RunControl] = None,
+    ) -> AsyncIterator[HarnessEvent]:
+        """Yield ordered events live while an async run executes."""
+
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[Any] = asyncio.Queue()
+        finished = object()
+        active_control = control or RunControl()
+
+        class QueueSink:
+            def publish(self, event: HarnessEvent) -> None:
+                loop.call_soon_threadsafe(queue.put_nowait, event)
+
+        task = asyncio.create_task(
+            self.arun(
+                user_query,
+                run_id=run_id,
+                session_id=session_id,
+                control=active_control,
+                event_sink=QueueSink(),
+            )
+        )
+        task.add_done_callback(
+            lambda _task: loop.call_soon_threadsafe(queue.put_nowait, finished)
+        )
+
+        try:
+            while True:
+                item = await queue.get()
+                if item is finished:
+                    break
+                yield item
+            await task
+        finally:
+            if not task.done():
+                active_control.cancel("Event stream closed by caller")
+                try:
+                    await task
+                except (Exception, asyncio.CancelledError):
+                    pass
+
+    @staticmethod
+    def _combine_event_sinks(
+        first: Optional[EventSinkProtocol],
+        second: Optional[EventSinkProtocol],
+    ) -> Optional[EventSinkProtocol]:
+        if first is None:
+            return second
+        if second is None or first is second:
+            return first
+        return _FanoutEventSink(first, second)
 
     def _execute_step(
         self,
@@ -314,90 +461,109 @@ class NanoEngine:
     ) -> None:
         call_id = call.call_id or f"call_{uuid4().hex}"
         legacy_action = {"name": call.name, "arguments": call.arguments}
+        request = ToolRequest(
+            call_id=call_id,
+            name=call.name,
+            arguments=call.arguments,
+            run_id=recorder.run_context.run_id,
+            session_id=recorder.run_context.session_id,
+            step_id=step_res.step_id,
+        )
         recorder.emit(
             EventType.TOOL_REQUESTED,
             step_id=step_res.step_id,
-            data={"call": call.model_dump(mode="json")},
+            data={"request": request.model_dump(mode="json")},
         )
 
-        # Permission gate
-        if self.permissions:
-            error = self.permissions.enforce(call.name, call.arguments)
-            if error:
-                observation = str(error)
-                execution = ToolExecution(
-                    call_id=call_id,
-                    name=call.name,
-                    arguments=call.arguments,
-                    status=ToolExecutionStatus.DENIED,
-                    output=observation,
-                    error=observation,
-                )
-                self._record_tool_execution(step_res, execution, legacy_action)
-                step_res.status = "error"
-                self.context.add_message(
-                    AgentMessage(
-                        role="tool",
-                        content=observation,
-                        tool_call_id=call_id,
-                    )
-                )
-                recorder.emit(
-                    EventType.TOOL_DENIED,
-                    step_id=step_res.step_id,
-                    data={"execution": execution.model_dump(mode="json")},
-                )
-                return
+        decision = self._before_tool(request)
+        recorder.emit(
+            EventType.POLICY_EVALUATED,
+            step_id=step_res.step_id,
+            data={
+                "stage": PolicyStage.BEFORE_TOOL.value,
+                "request": request.model_dump(mode="json"),
+                "decision": decision.model_dump(mode="json"),
+            },
+        )
 
-        # PreToolUse hook
-        inject_msg = None
-        if self.tool_hooks:
-            decision = self.tool_hooks.run_pre(call.name, call.arguments)
-            if decision:
-                if decision.action == 1:  # BLOCK
-                    observation = decision.message or f"Tool '{call.name}' blocked by hook"
-                    execution = ToolExecution(
-                        call_id=call_id,
-                        name=call.name,
-                        arguments=call.arguments,
-                        status=ToolExecutionStatus.BLOCKED,
-                        output=observation,
-                        error=observation,
-                    )
-                    self._record_tool_execution(step_res, execution, legacy_action)
-                    step_res.status = "error"
-                    self.context.add_message(
-                        AgentMessage(
-                            role="tool",
-                            content=observation,
-                            tool_call_id=call_id,
-                        )
-                    )
-                    recorder.emit(
-                        EventType.TOOL_BLOCKED,
-                        step_id=step_res.step_id,
-                        data={"execution": execution.model_dump(mode="json")},
-                    )
-                    return
-                if decision.action == 2 and decision.message:  # INJECT
-                    inject_msg = decision.message
+        if decision.outcome == PolicyOutcome.REQUIRE_APPROVAL:
+            recorder.emit(
+                EventType.APPROVAL_REQUESTED,
+                step_id=step_res.step_id,
+                data={
+                    "request": request.model_dump(mode="json"),
+                    "decision": decision.model_dump(mode="json"),
+                },
+            )
+            approval = self._request_approval(request, decision)
+            recorder.emit(
+                EventType.APPROVAL_RESOLVED,
+                step_id=step_res.step_id,
+                data={
+                    "request": request.model_dump(mode="json"),
+                    "approval": approval.model_dump(mode="json"),
+                },
+            )
+            if not approval.approved:
+                decision = decision.model_copy(
+                    update={
+                        "outcome": PolicyOutcome.DENY,
+                        "reason": approval.reason or "Approval denied",
+                        "metadata": {
+                            **decision.metadata,
+                            "approval": approval.model_dump(mode="json"),
+                        },
+                    }
+                )
 
-        if inject_msg:
+        if decision.outcome == PolicyOutcome.DENY:
+            observation = decision.reason or f"Tool '{call.name}' denied by policy"
+            blocked = decision.metadata.get("execution_status") == "blocked"
+            execution = ToolExecution(
+                call_id=call_id,
+                name=call.name,
+                arguments=call.arguments,
+                status=(
+                    ToolExecutionStatus.BLOCKED
+                    if blocked
+                    else ToolExecutionStatus.DENIED
+                ),
+                output=observation,
+                error=observation,
+                metadata={"policy": decision.model_dump(mode="json")},
+            )
+            self._record_tool_execution(step_res, execution, legacy_action)
+            step_res.status = "error"
             self.context.add_message(
-                AgentMessage(role="system", content=inject_msg)
+                AgentMessage(
+                    role="tool",
+                    content=observation,
+                    tool_call_id=call_id,
+                )
+            )
+            recorder.emit(
+                EventType.TOOL_BLOCKED if blocked else EventType.TOOL_DENIED,
+                step_id=step_res.step_id,
+                data={"execution": execution.model_dump(mode="json")},
+            )
+            return
+
+        if decision.context_injection:
+            self.context.add_message(
+                AgentMessage(role="system", content=decision.context_injection)
             )
 
         # Execute tool
+        recorder.emit(
+            EventType.TOOL_EXECUTION_STARTED,
+            step_id=step_res.step_id,
+            data={"request": request.model_dump(mode="json")},
+        )
         try:
-            observation = str(self.tools.call(call.name, call.arguments))
-
-            # PostToolUse hook
-            if self.tool_hooks and observation:
-                decision = self.tool_hooks.run_post(
-                    call.name, call.arguments, observation
-                )
-                if decision and decision.action == 2 and decision.message:  # INJECT
-                    observation += "\n" + decision.message
+            if self.executor:
+                observation = str(self.executor.execute(request))
+            else:
+                observation = str(self.tools.call(call.name, call.arguments))
 
             execution = ToolExecution(
                 call_id=call_id,
@@ -406,7 +572,40 @@ class NanoEngine:
                 status=ToolExecutionStatus.SUCCESS,
                 output=observation,
             )
-            event_type = EventType.TOOL_COMPLETED
+
+            post_decision = self._after_tool(request, execution)
+            recorder.emit(
+                EventType.POLICY_EVALUATED,
+                step_id=step_res.step_id,
+                data={
+                    "stage": PolicyStage.AFTER_TOOL.value,
+                    "request": request.model_dump(mode="json"),
+                    "decision": post_decision.model_dump(mode="json"),
+                },
+            )
+            if post_decision.context_injection:
+                self.context.add_message(
+                    AgentMessage(
+                        role="system",
+                        content=post_decision.context_injection,
+                    )
+                )
+            if post_decision.output_suffix:
+                observation += "\n" + post_decision.output_suffix
+                execution.output = observation
+            if post_decision.outcome != PolicyOutcome.ALLOW:
+                observation = (
+                    post_decision.reason
+                    or f"Result from '{call.name}' blocked by post-tool policy"
+                )
+                execution.status = ToolExecutionStatus.BLOCKED
+                execution.output = observation
+                execution.error = observation
+                event_type = EventType.TOOL_BLOCKED
+                step_res.status = "error"
+            else:
+                event_type = EventType.TOOL_COMPLETED
+            execution.metadata["policy"] = post_decision.model_dump(mode="json")
         except Exception as exc:
             observation = f"ToolError({call.name}): {exc}"
             step_res.status = "error"
@@ -433,6 +632,109 @@ class NanoEngine:
             step_id=step_res.step_id,
             data={"execution": execution.model_dump(mode="json")},
         )
+
+    def _before_tool(self, request: ToolRequest) -> PolicyDecision:
+        if self.policy:
+            return self.policy.decide(PolicyStage.BEFORE_TOOL, request)
+
+        # Compatibility adapter for v1 app-layer permission managers and
+        # integer ToolHookRunner decisions.
+        if self.permissions:
+            error = self.permissions.enforce(request.name, request.arguments)
+            if error:
+                return PolicyDecision(
+                    outcome=PolicyOutcome.DENY,
+                    reason=str(error),
+                    source="legacy_permissions",
+                )
+
+        if self.tool_hooks:
+            legacy = self.tool_hooks.run_pre(request.name, request.arguments)
+            if legacy:
+                if legacy.action == 1:  # BLOCK
+                    return PolicyDecision(
+                        outcome=PolicyOutcome.DENY,
+                        reason=(
+                            legacy.message
+                            or f"Tool '{request.name}' blocked by hook"
+                        ),
+                        source="legacy_tool_hook",
+                        metadata={"execution_status": "blocked"},
+                    )
+                if legacy.action == 2 and legacy.message:  # INJECT
+                    return PolicyDecision(
+                        outcome=PolicyOutcome.ALLOW,
+                        source="legacy_tool_hook",
+                        context_injection=legacy.message,
+                    )
+
+        return PolicyDecision(outcome=PolicyOutcome.ALLOW, source="engine_default")
+
+    def _after_tool(
+        self,
+        request: ToolRequest,
+        execution: ToolExecution,
+    ) -> PolicyDecision:
+        if self.policy:
+            return self.policy.decide(
+                PolicyStage.AFTER_TOOL,
+                request,
+                execution,
+            )
+
+        if self.tool_hooks and execution.output:
+            legacy = self.tool_hooks.run_post(
+                request.name,
+                request.arguments,
+                execution.output,
+            )
+            if legacy:
+                if legacy.action == 1:  # BLOCK result exposure
+                    return PolicyDecision(
+                        outcome=PolicyOutcome.DENY,
+                        reason=(
+                            legacy.message
+                            or f"Result from '{request.name}' blocked by hook"
+                        ),
+                        source="legacy_tool_hook",
+                    )
+                if legacy.action == 2 and legacy.message:  # INJECT
+                    return PolicyDecision(
+                        outcome=PolicyOutcome.ALLOW,
+                        source="legacy_tool_hook",
+                        output_suffix=legacy.message,
+                    )
+
+        return PolicyDecision(outcome=PolicyOutcome.ALLOW, source="engine_default")
+
+    def _request_approval(
+        self,
+        request: ToolRequest,
+        decision: PolicyDecision,
+    ) -> ApprovalResult:
+        if self.approval_broker is None:
+            return ApprovalResult(
+                status=ApprovalStatus.DENIED,
+                reason="Approval required but no approval broker is configured",
+            )
+
+        result = self.approval_broker.request_approval(request, decision)
+        if isinstance(result, ApprovalResult):
+            return result
+        if isinstance(result, bool):
+            return ApprovalResult(
+                status=(
+                    ApprovalStatus.APPROVED
+                    if result
+                    else ApprovalStatus.DENIED
+                ),
+                reason=(
+                    "Approved by broker"
+                    if result
+                    else "Denied by broker"
+                ),
+            )
+        raise TypeError("Approval broker must return ApprovalResult or bool")
 
     @staticmethod
     def _record_tool_execution(

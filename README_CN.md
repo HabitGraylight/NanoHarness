@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-548%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-561%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -73,7 +73,7 @@ NanoHarness 是一个极简的 Python Agent 框架，实现了 [Agent Harness Su
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**设计原则：** 引擎不知道 Prompt、记忆、权限或 I/O 的存在。所有行为通过注入实现，使内核可安全地在不同 Agent 应用间共享。
+**设计原则：** 引擎不包含应用专属的 Prompt、记忆、策略规则、审批界面、沙箱实现或输出 UI。它只编排注入的协议，因此可以安全地在不同 Agent 应用间共享。
 
 ---
 
@@ -85,12 +85,14 @@ nanoharness/
     schema.py            #   消息、工具执行、Run/Checkpoint、事件与评估协议
     base.py              #   ETCSLV ABCs, LLMProtocol, HookStage
     engine.py            #   NanoEngine（含循环中评估）
+    runtime.py           #   RunControl（协作式取消 + Steering）
     prompt.py            #   PromptManager（YAML 模板加载器）
   components/            # ETCSLV 最简实现
     tools/               #   T: DictToolRegistry, ScriptToolRegistry
     context/             #   C: SimpleContextManager
     state/               #   S: JsonStateStore
     hooks/               #   L: SimpleHookManager
+    lifecycle/           #   Policy、审批、执行器与事件组件
     evaluator/           #   V: TraceEvaluator（含 should_stop + evaluate_success）
   utils/                 # get_logger, count_tokens
 configs/
@@ -99,7 +101,7 @@ configs/
 examples/
   coding_agent/          # 完整 Coding Agent 参考（434 个测试）
   nano_loop/             # 证据驱动的 Loop Engineering 示例（27 个测试）
-tests/                   # 87 个内核测试
+tests/                   # 100 个内核测试
 ```
 
 ---
@@ -142,7 +144,8 @@ NanoEngine.run(query)
           ├─ L.trigger(ON_THOUGHT_READY)
           │
           ├─ Act:    对每个 tool_call:
-          │            可选权限门控 → T.call(name, args)
+          │            PolicyDecision → 可选 ApprovalBroker
+          │            → ToolExecutor（注册表 / 沙箱 / 远程）
           │            C.add_message(observation)
           │
           ├─ S.save_state()
@@ -154,7 +157,7 @@ NanoEngine.run(query)
      └─ L.trigger(ON_TASK_END)
 ```
 
-引擎内部没有记忆、Prompt 渲染或权限逻辑——全部通过注入的组件和钩子流转。
+引擎内部没有应用策略规则、审批 UI 或沙箱逻辑——全部通过注入的协议实现流转。
 
 ---
 
@@ -171,6 +174,20 @@ NanoEngine.run(query)
 - `EvaluationResult.achieved` 作为正式成功判定。
 
 旧的 `StepResult.action` 和 `observation` 字段暂时保留，并映射到该步最后一次工具执行。
+
+## 生命周期策略与异步 Runtime
+
+协议 v2.1 为工具生命周期增加了明确边界：
+
+- `ToolPolicyProtocol` 在工具执行前后返回类型化 `PolicyDecision`；
+- `ApprovalBrokerProtocol` 将交互式或远程审批从策略判定中分离；
+- `ToolExecutorProtocol` 成为本地、沙箱或远程执行的可替换边界；
+- `CompositeToolPolicy` 以确定的优先级组合权限策略和 Tool Hook；
+- `EventBus`、`RedactingEventSink`、`JsonlEventSink` 和 `ConsoleEventSink` 组成可组合的实时观测管线；
+- `NanoEngine.arun()` 与 `NanoEngine.astream()` 分别提供异步报告和实时事件接口；
+- `RunControl` 在安全的步骤边界提供协作式取消与 Steering。
+
+旧的 `permissions=` 和 `tool_hooks=` 构造参数继续兼容；Coding Agent Builder 已切换到新的类型化策略与审批路径。
 
 ---
 
@@ -209,7 +226,7 @@ def chat(self, messages, tools=None) -> LLMResponse: ...
 ## 测试
 
 ```bash
-# 内核测试（87 个）
+# 内核测试（100 个）
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # Coding Agent 测试（434 个：291 UT + 143 ST）
@@ -221,7 +238,7 @@ cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**共 548 个测试。** 内核测试只需要内核依赖与 pytest。
+**共 561 个测试。** 内核测试只需要内核依赖与 pytest。
 
 ---
 
