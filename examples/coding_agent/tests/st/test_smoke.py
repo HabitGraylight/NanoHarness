@@ -148,6 +148,10 @@ def test_builder_assembles(tmp_path, monkeypatch):
     mock_llm = MockLLMClient(response="Task complete.")
 
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setattr(
+        "app.builder.MCP_CONFIG",
+        str(tmp_path / "missing-mcp.json"),
+    )
 
     with patch("app.builder.OpenAIAdapter", return_value=mock_llm):
         engine = build_coding_engine()
@@ -155,6 +159,7 @@ def test_builder_assembles(tmp_path, monkeypatch):
     assert isinstance(engine, NanoEngine)
     report = engine.run("Test task")
     assert report["summary"]["total_steps"] >= 1
+    engine.extension_manager.close()
 
 
 # ── Context management tests (three-layer) ──

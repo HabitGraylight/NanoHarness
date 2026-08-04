@@ -31,6 +31,11 @@ class TestBuilderReturnsEngine:
 
         # Point sandbox to tmp_path to avoid writing to real sandbox
         monkeypatch.setattr(builder_mod, "SANDBOX", str(tmp_path / "sandbox"))
+        monkeypatch.setattr(
+            builder_mod,
+            "MCP_CONFIG",
+            str(tmp_path / "missing-mcp.json"),
+        )
 
         engine = builder_mod.build_coding_engine(
             api_key="fake-key",
@@ -45,9 +50,11 @@ class TestBuilderReturnsEngine:
         extension_names = {
             extension["name"] for extension in inventory["extensions"]
         }
-        assert extension_names == {"memory.file", "skills.directory"}
+        assert extension_names == {"mcp.stdio", "memory.file", "skills.directory"}
         assert "memory.store" in inventory["capabilities"]
+        assert "mcp.clients" in inventory["capabilities"]
         assert "skills.registry" in inventory["capabilities"]
+        engine.extension_manager.close()
 
     def test_builder_has_tools(self, monkeypatch, tmp_path):
         """Engine has tools registered (file_read, search_code, etc.)."""
@@ -58,6 +65,11 @@ class TestBuilderReturnsEngine:
         mock_adapter.chat.return_value = MagicMock(content="ok", tool_calls=None)
         monkeypatch.setattr(builder_mod, "OpenAIAdapter", lambda *a, **kw: mock_adapter)
         monkeypatch.setattr(builder_mod, "SANDBOX", str(tmp_path / "sandbox"))
+        monkeypatch.setattr(
+            builder_mod,
+            "MCP_CONFIG",
+            str(tmp_path / "missing-mcp.json"),
+        )
 
         engine = builder_mod.build_coding_engine(api_key="fake-key")
 
@@ -69,6 +81,7 @@ class TestBuilderReturnsEngine:
         assert "skill" in tool_names
         assert "task" in tool_names
         assert "save_memory" in tool_names
+        engine.extension_manager.close()
 
 
 class TestWireTaskAwareness:

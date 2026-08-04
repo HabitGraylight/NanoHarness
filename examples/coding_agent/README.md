@@ -85,7 +85,7 @@ coding_agent/
 │   ├── dispatch.py        #   Tool registry with path sandboxing
 │   ├── handlers.py        #   Script + Python tool registration
 │   ├── hooks.py           #   Lifecycle hooks + tool interception (BLOCK/INJECT)
-│   ├── mcp.py             #   MCP client — external tool servers via stdio JSON-RPC
+│   ├── mcp.py             #   Compatibility facade → nanoharness.extensions.mcp
 │   ├── memory.py          #   File-based memory (.memory/ directory)
 │   ├── permissions.py     #   4-step permission pipeline (deny/mode/allow/ask)
 │   ├── prompt_builder.py  #   Five-segment system prompt builder
@@ -141,7 +141,7 @@ Key subsystems (all app-layer, no kernel changes):
 | **Scheduler** | `scheduler.py` | Cron-based recurring + one-shot scheduled tasks |
 | **Background** | `background.py` | Run slow commands in background threads |
 | **Subagent** | `subagent.py` | Delegate focused subtasks with read-only tool subset |
-| **MCP** | `mcp.py` | External tool servers via Model Context Protocol (stdio JSON-RPC) |
+| **MCP** | `nanoharness.extensions.mcp` | Official SDK stdio sessions, dynamic tools, and managed process cleanup (`app/mcp.py` keeps the old imports) |
 | **Skills** | `skills.py` | Markdown skill files with YAML frontmatter |
 | **Context** | `context.py` | Three-layer: spill large results → compress old → summarize when long |
 | **Resilient LLM** | `resilient_llm.py` | Continuation, context compression, exponential backoff |
@@ -166,6 +166,8 @@ Key subsystems (all app-layer, no kernel changes):
 | **Subagent** | `task` (delegates subtask with read-only tools) |
 | **Skills** | `skill` (discover and load markdown skills) |
 | **MCP** | `mcp__{server}__{tool}` (dynamically registered from external servers) |
+
+Memory, Skills, and MCP are installed through one `ExtensionManager`. The resolved capability inventory is available at `engine.extension_manager.inspect()`, and the CLI closes resource-owning extensions on exit.
 
 ## Permission Model
 

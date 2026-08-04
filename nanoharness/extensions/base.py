@@ -105,6 +105,13 @@ class ExtensionProtocol(Protocol):
     ) -> ExtensionInstallation:
         ...
 
+    def close(
+        self,
+        context: ExtensionContext,
+        installation: ExtensionInstallation,
+    ) -> None:
+        ...
+
 
 class BaseExtension(ABC):
     """Convenience base that standardizes config validation and inspection."""
@@ -130,6 +137,18 @@ class BaseExtension(ABC):
             "manifest": self.manifest.model_dump(mode="json"),
             "config_schema": self.config_schema(),
         }
+
+    def close(
+        self,
+        context: ExtensionContext,
+        installation: ExtensionInstallation,
+    ) -> None:
+        """Release resources owned by an installed extension.
+
+        Most extensions are passive and need no cleanup. Resource-owning
+        extensions can override this hook; ExtensionManager calls it once in
+        reverse installation order.
+        """
 
     @abstractmethod
     def install(

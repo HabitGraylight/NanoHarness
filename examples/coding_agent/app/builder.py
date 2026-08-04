@@ -20,6 +20,7 @@ from nanoharness.core.prompt import PromptManager
 from nanoharness.core.schema import AgentMessage
 from nanoharness.extensions import ExtensionContext, ExtensionManager
 from nanoharness.extensions.memory import MemoryExtension
+from nanoharness.extensions.mcp import MCPExtension
 from nanoharness.extensions.skills import SkillsExtension
 
 from app.context import ManagedContext
@@ -31,10 +32,14 @@ from app.task_system import TaskBoard, register_task_tools
 from app.team import TeammateManager, register_team_tools
 from app.tools import build_tools
 from app.worktree import WorktreeRegistry, register_worktree_tools
-from app.mcp import register_mcp_tools
 
 # Runtime artifacts go here
 SANDBOX = os.path.join(os.path.dirname(os.path.dirname(__file__)), "sandbox")
+MCP_CONFIG = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)),
+    "configs",
+    "mcp_servers.json",
+)
 
 
 def build_coding_engine(
@@ -90,8 +95,10 @@ def build_coding_engine(
     register_worktree_tools(registry=tools, wt_registry=wt_registry)
 
     # --- MCP tools (external tool servers) ---
-    mcp_config = os.path.join(workspace_root, "configs", "mcp_servers.json")
-    register_mcp_tools(registry=tools, config_path=mcp_config)
+    extension_manager.install(
+        MCPExtension(),
+        {"config_path": MCP_CONFIG},
+    )
 
     # --- Skills ---
     skills_dir = os.path.join(workspace_root, "skills")

@@ -12,6 +12,8 @@ from nanoharness.extensions.manager import (
     ExtensionConflictError,
     ExtensionDependencyError,
     ExtensionManager,
+    ExtensionManagerClosedError,
+    ExtensionShutdownError,
 )
 
 __all__ = [
@@ -24,6 +26,8 @@ __all__ = [
     "ExtensionDependencyError",
     "ExtensionInstallation",
     "ExtensionManager",
+    "ExtensionManagerClosedError",
     "ExtensionManifest",
     "ExtensionProtocol",
+    "ExtensionShutdownError",
 ]

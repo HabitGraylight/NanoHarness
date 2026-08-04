@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-574%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-580%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -95,9 +95,10 @@ nanoharness/
     lifecycle/           #   Policy, approval, executor, and event components
     evaluator/           #   V: TraceEvaluator (with should_stop + evaluate_success)
   extensions/            # Reusable capability packages
-    base.py              #   Manifest, config, install, and receipt contracts
-    manager.py           #   Dependency/conflict validation + inventory
+    base.py              #   Manifest, config, install, close, and receipt contracts
+    manager.py           #   Dependency/conflict validation + inventory/lifecycle
     memory/              #   FileMemoryManager + MemoryExtension
+    mcp/                 #   MCP stdio clients + dynamic MCP tools
     skills/              #   SkillRegistry + SkillsExtension
   utils/                 # get_logger, count_tokens
 configs/
@@ -106,7 +107,7 @@ configs/
 examples/
   coding_agent/          # Full-featured coding agent reference (434 tests)
   nano_loop/             # Evidence-gated Loop Engineering example (27 tests)
-tests/                   # 113 kernel tests
+tests/                   # 119 kernel tests
 ```
 
 ---
@@ -206,7 +207,8 @@ Extension Protocol 1.0 gives reusable capabilities a common white-box shape:
 - each extension exposes a Pydantic configuration schema before installation;
 - `ExtensionContext` is the explicit tool/service/capability installation surface;
 - `ExtensionInstallation` is a serializable receipt of installed tools and services;
-- `ExtensionManager.inspect()` returns the resolved capability inventory.
+- `ExtensionManager.inspect()` returns the resolved capability inventory;
+- `ExtensionManager.close()` releases resource-owning extensions once, in reverse installation order.
 
 ```python
 from nanoharness import DictToolRegistry, ExtensionContext, ExtensionManager
@@ -218,14 +220,16 @@ extensions.install(MemoryExtension(), {"directory": ".memory"})
 
 print(extensions.inspect())
 memory = context.services["memory"]
+extensions.close()
 ```
 
 Extracted capabilities currently include:
 
 - `MemoryExtension` — Markdown memory store plus save/recall/list tools;
-- `SkillsExtension` — directory discovery, metadata index, and on-demand instruction loading.
+- `SkillsExtension` — directory discovery, metadata index, and on-demand instruction loading;
+- `MCPExtension` — official MCP SDK stdio sessions, dynamic tool discovery, redacted config receipts, and managed subprocess cleanup.
 
-The Coding Agent installs both through `ExtensionManager`. Its old `app.memory`, `app.skills`, and tool-registration imports remain compatibility forwarding layers rather than duplicate implementations.
+The Coding Agent installs all three through `ExtensionManager`. Its old `app.memory`, `app.skills`, `app.mcp`, and tool-registration imports remain compatibility forwarding layers rather than duplicate implementations. MCP remains optional: install `nanoharness[mcp]` only for profiles that need external servers.
 
 ---
 
@@ -264,7 +268,7 @@ See `examples/nano_loop/` for an outer-loop control plane that repeatedly create
 ## Testing
 
 ```bash
-# Kernel tests (113)
+# Kernel tests (119)
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # Coding agent tests (434: 291 UT + 143 ST)
@@ -276,7 +280,7 @@ cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**Total: 574 tests.** Kernel tests require only the kernel dependencies and pytest.
+**Total: 580 tests.** Kernel tests require only the kernel dependencies and pytest; real MCP stdio tests use the `mcp` optional dependency.
 
 ---
 

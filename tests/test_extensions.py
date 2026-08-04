@@ -10,8 +10,11 @@ from nanoharness.extensions import (
     ExtensionDependencyError,
     ExtensionInstallation,
     ExtensionManager,
+    ExtensionManagerClosedError,
     ExtensionManifest,
+    ExtensionShutdownError,
 )
+from nanoharness.extensions.mcp import MCPExtension
 from nanoharness.extensions.memory import MemoryExtension
 from nanoharness.extensions.skills import SkillRegistry, SkillsExtension
 
@@ -299,3 +302,180 @@ def test_skill_registry_reload_discovers_new_files(tmp_path):
     registry.reload()
 
     assert registry.list_names() == ["new-skill"]
+
+
+class ClosingDemoExtension(DemoExtension):
+    def __init__(self, journal, *, fail_close=False, **kwargs):
+        super().__init__(**kwargs)
+        self.journal = journal
+        self.fail_close = fail_close
+
+    def close(self, context, installation):
+        self.journal.append(installation.name)
+        if self.fail_close:
+            raise RuntimeError("close failed")
+
+
+def test_extension_manager_closes_in_reverse_order_and_only_once():
+    journal = []
+    manager = make_manager()
+    manager.install(ClosingDemoExtension(journal, name="first"))
+    manager.install(ClosingDemoExtension(journal, name="second"))
+
+    manager.close()
+    manager.close()
+
+    assert journal == ["second", "first"]
+    assert manager.closed
+    assert manager.inspect()["closed"] is True
+    with pytest.raises(ExtensionManagerClosedError):
+        manager.install(DemoExtension(name="late"))
+
+
+def test_extension_manager_continues_closing_after_failure():
+    journal = []
+    manager = make_manager()
+    manager.install(ClosingDemoExtension(journal, name="first"))
+    manager.install(
+        ClosingDemoExtension(journal, name="second", fail_close=True)
+    )
+
+    with pytest.raises(ExtensionShutdownError, match="second: close failed"):
+        manager.close()
+
+    assert journal == ["second", "first"]
+    assert manager.closed
+
+
+class FakeMCPClient:
+    instances = []
+
+    def __init__(self, name, command, **kwargs):
+        self.name = name
+        self.command = command
+        self.connected = False
+        self.calls = []
+        self.__class__.instances.append(self)
+
+    def connect(self):
+        if self.command == "broken":
+            raise RuntimeError("cannot start")
+        self.connected = True
+
+    def list_tools(self):
+        return [
+            {
+                "name": "echo",
+                "description": "Echo input",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {"text": {"type": "string"}},
+                    "required": ["text"],
+                },
+            }
+        ]
+
+    def call_tool(self, name, arguments=None):
+        self.calls.append((name, arguments))
+        return arguments["text"]
+
+    def disconnect(self):
+        self.connected = False
+
+
+@pytest.fixture
+def fake_mcp_client(monkeypatch):
+    FakeMCPClient.instances = []
+    monkeypatch.setattr(
+        "nanoharness.extensions.mcp.extension.MCPClient",
+        FakeMCPClient,
+    )
+    return FakeMCPClient
+
+
+def test_mcp_extension_discovers_tools_redacts_env_and_closes(fake_mcp_client):
+    manager = make_manager()
+
+    installation = manager.install(
+        MCPExtension(),
+        {
+            "servers": [
+                {
+                    "name": "demo",
+                    "command": "fake",
+                    "env": {"API_TOKEN": "super-secret"},
+                }
+            ]
+        },
+    )
+    result = manager.context.tools.call("mcp__demo__echo", {"text": "hello"})
+
+    assert result == "hello"
+    assert installation.tools == ["mcp__demo__echo"]
+    assert installation.config["servers"][0]["env"] == {"API_TOKEN": "***"}
+    assert installation.metadata["connected_servers"] == ["demo"]
+    assert set(installation.capabilities) == {"mcp.clients", "tools.mcp"}
+    assert manager.context.services["mcp"].connected_names == ["demo"]
+
+    manager.close()
+    assert not fake_mcp_client.instances[0].connected
+
+
+def test_mcp_extension_preflights_dynamic_tool_conflicts(fake_mcp_client):
+    manager = make_manager()
+    manager.context.register_tool(
+        "mcp__demo__echo",
+        lambda args: "existing",
+        {
+            "type": "function",
+            "function": {
+                "name": "mcp__demo__echo",
+                "description": "Existing",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        },
+    )
+
+    with pytest.raises(ValueError, match="tool conflicts"):
+        manager.install(
+            MCPExtension(),
+            {"servers": [{"name": "demo", "command": "fake"}]},
+        )
+
+    assert "mcp" not in manager.context.services
+    assert not fake_mcp_client.instances[0].connected
+
+
+def test_mcp_extension_records_unavailable_servers(fake_mcp_client):
+    manager = make_manager()
+
+    with pytest.warns(RuntimeWarning, match="cannot start"):
+        installation = manager.install(
+            MCPExtension(),
+            {"servers": [{"name": "offline", "command": "broken"}]},
+        )
+
+    assert installation.tools == []
+    assert installation.metadata["failed_servers"] == ["offline"]
+    assert manager.context.services["mcp"].failures == {
+        "offline": "cannot start"
+    }
+
+
+def test_mcp_extension_fail_fast_closes_connected_servers(fake_mcp_client):
+    manager = make_manager()
+
+    with pytest.raises(RuntimeError, match="offline.*cannot start"):
+        manager.install(
+            MCPExtension(),
+            {
+                "fail_fast": True,
+                "servers": [
+                    {"name": "online", "command": "fake"},
+                    {"name": "offline", "command": "broken"},
+                ],
+            },
+        )
+
+    assert "mcp" not in manager.context.services
+    assert all(not client.connected for client in fake_mcp_client.instances)

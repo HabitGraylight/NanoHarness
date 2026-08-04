@@ -80,6 +80,7 @@ def _print_goal_verification(engine, query, report):
 
 
 def main():
+    engine = None
     try:
         engine = build_coding_engine()
     except KeyError:
@@ -87,15 +88,18 @@ def main():
         print("  export DEEPSEEK_API_KEY=\"sk-...\"")
         sys.exit(1)
 
-    if len(sys.argv) > 1:
-        # Single-shot mode
-        query = " ".join(sys.argv[1:])
-        report = engine.run(query)
-        _print_goal_verification(engine, query, report)
-        _print_trajectory(report)
-    else:
-        # Interactive REPL
-        run_repl(engine)
+    try:
+        if len(sys.argv) > 1:
+            # Single-shot mode
+            query = " ".join(sys.argv[1:])
+            report = engine.run(query)
+            _print_goal_verification(engine, query, report)
+            _print_trajectory(report)
+        else:
+            # Interactive REPL
+            run_repl(engine)
+    finally:
+        engine.extension_manager.close()
 
 
 def _print_trajectory(report):

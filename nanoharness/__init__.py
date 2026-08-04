@@ -76,6 +76,15 @@ from nanoharness.extensions.memory import (
     MemoryExtension,
     MemoryExtensionConfig,
 )
+from nanoharness.extensions.mcp import (
+    MCPClient,
+    MCPClientPool,
+    MCPDependencyError,
+    MCPExtension,
+    MCPExtensionConfig,
+    MCPServerConfig,
+    PluginLoader,
+)
 from nanoharness.extensions.skills import (
     SkillEntry,
     SkillRegistry,
