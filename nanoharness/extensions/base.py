@@ -113,6 +113,13 @@ class ExtensionProtocol(Protocol):
         ...
 
 
+class NotificationSourceProtocol(Protocol):
+    """Host-facing source of system notifications from long-lived services."""
+
+    def drain(self) -> List[Dict[str, Any]]:
+        ...
+
+
 class BaseExtension(ABC):
     """Convenience base that standardizes config validation and inspection."""
 

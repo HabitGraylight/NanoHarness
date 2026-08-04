@@ -6,6 +6,7 @@ from nanoharness.extensions.base import (
     ExtensionInstallation,
     ExtensionManifest,
     ExtensionProtocol,
+    NotificationSourceProtocol,
 )
 from nanoharness.extensions.manager import (
     DuplicateExtensionError,
@@ -30,4 +31,5 @@ __all__ = [
     "ExtensionManifest",
     "ExtensionProtocol",
     "ExtensionShutdownError",
+    "NotificationSourceProtocol",
 ]

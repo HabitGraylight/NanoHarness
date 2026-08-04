@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-580%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-586%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -97,8 +97,10 @@ nanoharness/
   extensions/            # 可复用能力包
     base.py              #   Manifest、配置、安装、关闭与回执协议
     manager.py           #   依赖/冲突校验、安装清单与生命周期
+    background/          #   托管 Shell 进程与完成通知
     memory/              #   FileMemoryManager + MemoryExtension
     mcp/                 #   MCP stdio 客户端与动态 MCP 工具
+    scheduler/           #   持久化 cron/延时调度服务
     skills/              #   SkillRegistry + SkillsExtension
   utils/                 # get_logger, count_tokens
 configs/
@@ -107,7 +109,7 @@ configs/
 examples/
   coding_agent/          # 完整 Coding Agent 参考（434 个测试）
   nano_loop/             # 证据驱动的 Loop Engineering 示例（27 个测试）
-tests/                   # 119 个内核测试
+tests/                   # 125 个内核测试
 ```
 
 ---
@@ -205,6 +207,7 @@ Extension Protocol 1.0 为可复用能力提供统一的白箱结构：
 - 每个 Extension 在安装前即可输出 Pydantic 配置 Schema；
 - `ExtensionContext` 是显式的工具、服务和能力安装表面；
 - `ExtensionInstallation` 是可序列化的工具与服务安装回执；
+- `NotificationSourceProtocol` 为长生命周期服务提供统一的 Host `drain()` 契约；
 - `ExtensionManager.inspect()` 返回解析后的能力清单；
 - `ExtensionManager.close()` 按安装顺序的逆序关闭资源型扩展，且只执行一次。
 
@@ -225,9 +228,11 @@ extensions.close()
 
 - `MemoryExtension` — Markdown 记忆存储，以及 save/recall/list 工具；
 - `SkillsExtension` — 目录发现、元数据索引和按需加载完整指令；
-- `MCPExtension` — 基于官方 MCP SDK 的 stdio 会话、动态工具发现、配置回执脱敏和子进程托管关闭。
+- `MCPExtension` — 基于官方 MCP SDK 的 stdio 会话、动态工具发现、配置回执脱敏和子进程托管关闭；
+- `BackgroundExtension` — 有并发上限的 Shell 执行、工作目录边界、完成通知和关闭取消；
+- `SchedulerExtension` — 持久化 cron/延时 Prompt、托管检查线程和触发通知。
 
-Coding Agent 通过 `ExtensionManager` 安装三者；原有 `app.memory`、`app.skills`、`app.mcp` 和工具注册导入仅作为兼容转发层保留，不再维护重复实现。MCP 仍是可选能力，只有需要外部服务器的 Profile 才需安装 `nanoharness[mcp]`。
+Coding Agent 通过 `ExtensionManager` 安装五者；原有 `app.memory`、`app.skills`、`app.mcp`、`app.background`、`app.scheduler` 和工具注册导入仅作为兼容转发层保留，不再维护重复实现。MCP 仍是可选能力，只有需要外部服务器的 Profile 才需安装 `nanoharness[mcp]`。
 
 ---
 
@@ -266,7 +271,7 @@ def chat(self, messages, tools=None) -> LLMResponse: ...
 ## 测试
 
 ```bash
-# 内核测试（119 个）
+# 内核测试（125 个）
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # Coding Agent 测试（434 个：291 UT + 143 ST）
@@ -278,7 +283,7 @@ cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**共 580 个测试。** 内核测试只需要内核依赖与 pytest；真实 MCP stdio 测试使用 `mcp` 可选依赖。
+**共 586 个测试。** 内核测试只需要内核依赖与 pytest；真实 MCP stdio 测试使用 `mcp` 可选依赖。
 
 ---
 

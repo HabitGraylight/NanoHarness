@@ -50,9 +50,17 @@ class TestBuilderReturnsEngine:
         extension_names = {
             extension["name"] for extension in inventory["extensions"]
         }
-        assert extension_names == {"mcp.stdio", "memory.file", "skills.directory"}
+        assert extension_names == {
+            "background.shell",
+            "mcp.stdio",
+            "memory.file",
+            "scheduler.local",
+            "skills.directory",
+        }
+        assert "background.executor" in inventory["capabilities"]
         assert "memory.store" in inventory["capabilities"]
         assert "mcp.clients" in inventory["capabilities"]
+        assert "scheduler.service" in inventory["capabilities"]
         assert "skills.registry" in inventory["capabilities"]
         engine.extension_manager.close()
 
@@ -81,6 +89,8 @@ class TestBuilderReturnsEngine:
         assert "skill" in tool_names
         assert "task" in tool_names
         assert "save_memory" in tool_names
+        assert "background_run" in tool_names
+        assert "schedule_create" in tool_names
         engine.extension_manager.close()
 
 

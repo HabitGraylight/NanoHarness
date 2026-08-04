@@ -69,6 +69,13 @@ from nanoharness.extensions import (
     ExtensionManager,
     ExtensionManifest,
     ExtensionProtocol,
+    NotificationSourceProtocol,
+)
+from nanoharness.extensions.background import (
+    BackgroundExecutor,
+    BackgroundExtension,
+    BackgroundExtensionConfig,
+    BackgroundTask,
 )
 from nanoharness.extensions.memory import (
     FileMemoryManager,
@@ -84,6 +91,12 @@ from nanoharness.extensions.mcp import (
     MCPExtensionConfig,
     MCPServerConfig,
     PluginLoader,
+)
+from nanoharness.extensions.scheduler import (
+    Scheduler,
+    SchedulerExtension,
+    SchedulerExtensionConfig,
+    cron_matches,
 )
 from nanoharness.extensions.skills import (
     SkillEntry,

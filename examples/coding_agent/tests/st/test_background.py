@@ -45,10 +45,13 @@ class TestBackgroundRun:
 
     def test_max_concurrent_limit(self):
         bg = BackgroundExecutor("/tmp", max_concurrent=2)
-        bg.run("sleep 5")
-        bg.run("sleep 5")
-        with pytest.raises(RuntimeError, match="Too many"):
-            bg.run("echo fail")
+        try:
+            bg.run("sleep 5")
+            bg.run("sleep 5")
+            with pytest.raises(RuntimeError, match="Too many"):
+                bg.run("echo fail")
+        finally:
+            bg.close()
 
     def test_empty_command_rejected_by_tool(self):
         """The tool handler validates command, not the executor itself."""
@@ -82,6 +85,7 @@ class TestBackgroundDrain:
         bg.run("sleep 10")
         # Immediately drain — task still running, no notifications yet
         assert bg.drain() == []
+        bg.close()
 
     def test_drain_multiple_tasks(self):
         bg = BackgroundExecutor("/tmp")
@@ -107,6 +111,7 @@ class TestBackgroundPoll:
         result = bg.poll(task_id)
         assert result is not None
         assert result["status"] == "running"
+        bg.close()
 
     def test_poll_completed(self):
         bg = BackgroundExecutor("/tmp")

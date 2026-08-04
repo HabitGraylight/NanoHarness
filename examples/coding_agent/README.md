@@ -78,7 +78,7 @@ coding_agent/
 ├── NanoCA.md              # Project instructions loaded into system prompt
 ├── app/                   # App layer — all coding-agent-specific logic
 │   ├── adapters.py        #   OpenAI-compatible LLM adapter
-│   ├── background.py      #   Background task executor (thread pool)
+│   ├── background.py      #   Compatibility facade → nanoharness.extensions.background
 │   ├── builder.py         #   Engine assembly — wires all components
 │   ├── coding_evaluator.py#   V: error-loop/spinning/stagnation detection + LLM goal verification
 │   ├── context.py         #   Three-layer context: spill → compress → summarize
@@ -90,7 +90,7 @@ coding_agent/
 │   ├── permissions.py     #   4-step permission pipeline (deny/mode/allow/ask)
 │   ├── prompt_builder.py  #   Five-segment system prompt builder
 │   ├── resilient_llm.py   #   LLM wrapper: continuation, context compression, retry
-│   ├── scheduler.py       #   Cron-based scheduled tasks (recurring + one-shot)
+│   ├── scheduler.py       #   Compatibility facade → nanoharness.extensions.scheduler
 │   ├── skills.py          #   Markdown skill discovery and loading
 │   ├── subagent.py        #   Subagent delegation with read-only tool subset
 │   ├── task_system.py     #   Task board with dependency chains + worktree binding
@@ -138,8 +138,8 @@ Key subsystems (all app-layer, no kernel changes):
 | **Tasks** | `task_system.py` | Task board with dependency chains, status transitions, JSON persistence |
 | **Worktrees** | `worktree.py` | Git worktree per task — isolated execution lanes |
 | **Team** | `team.py` | Spawn teammates with independent Think-Act-Observe loops |
-| **Scheduler** | `scheduler.py` | Cron-based recurring + one-shot scheduled tasks |
-| **Background** | `background.py` | Run slow commands in background threads |
+| **Scheduler** | `nanoharness.extensions.scheduler` | Persistent cron/delay prompts and managed checker lifecycle |
+| **Background** | `nanoharness.extensions.background` | Bounded shell processes, completion notices, and shutdown cancellation |
 | **Subagent** | `subagent.py` | Delegate focused subtasks with read-only tool subset |
 | **MCP** | `nanoharness.extensions.mcp` | Official SDK stdio sessions, dynamic tools, and managed process cleanup (`app/mcp.py` keeps the old imports) |
 | **Skills** | `skills.py` | Markdown skill files with YAML frontmatter |
@@ -160,14 +160,14 @@ Key subsystems (all app-layer, no kernel changes):
 | **Memory** | `save_memory`, `recall_memory`, `list_memories` |
 | **Tasks** | `task_create`, `task_list`, `task_update`, `task_complete` |
 | **Worktree** | `worktree_create`, `worktree_enter`, `worktree_run`, `worktree_closeout`, `worktree_list` |
-| **Background** | `bg_run`, `bg_poll`, `bg_drain` |
+| **Background** | `background_run`, `background_poll` |
 | **Scheduler** | `schedule_create`, `schedule_pause`, `schedule_resume`, `schedule_delete`, `schedule_list` |
 | **Team** | `team_spawn`, `team_send`, `team_list`, `team_shutdown` |
 | **Subagent** | `task` (delegates subtask with read-only tools) |
 | **Skills** | `skill` (discover and load markdown skills) |
 | **MCP** | `mcp__{server}__{tool}` (dynamically registered from external servers) |
 
-Memory, Skills, and MCP are installed through one `ExtensionManager`. The resolved capability inventory is available at `engine.extension_manager.inspect()`, and the CLI closes resource-owning extensions on exit.
+Memory, Skills, MCP, Background, and Scheduler are installed through one `ExtensionManager`. Background, Scheduler, and teammates feed `ManagedContext` through the same notification-source contract. The resolved capability inventory is available at `engine.extension_manager.inspect()`, and the CLI closes resource-owning extensions on exit.
 
 ## Permission Model
 

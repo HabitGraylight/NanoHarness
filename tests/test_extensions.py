@@ -1,3 +1,6 @@
+import sys
+import time
+
 import pytest
 from pydantic import BaseModel, ConfigDict
 
@@ -17,6 +20,8 @@ from nanoharness.extensions import (
 from nanoharness.extensions.mcp import MCPExtension
 from nanoharness.extensions.memory import MemoryExtension
 from nanoharness.extensions.skills import SkillRegistry, SkillsExtension
+from nanoharness.extensions.background import BackgroundExtension
+from nanoharness.extensions.scheduler import SchedulerExtension
 
 
 class DemoConfig(BaseModel):
@@ -479,3 +484,148 @@ def test_mcp_extension_fail_fast_closes_connected_servers(fake_mcp_client):
 
     assert "mcp" not in manager.context.services
     assert all(not client.connected for client in fake_mcp_client.instances)
+
+
+def wait_for_background(executor, task_id, timeout=5.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        result = executor.poll(task_id)
+        if result and result["status"] != "running":
+            return result
+        time.sleep(0.02)
+    raise TimeoutError(f"Background task {task_id} did not finish")
+
+
+def test_background_extension_installs_tools_service_and_notifications(tmp_path):
+    manager = make_manager()
+    installation = manager.install(
+        BackgroundExtension(),
+        {
+            "workspace_root": str(tmp_path),
+            "scratch_dir": str(tmp_path / "scratch"),
+            "shell_command": [sys.executable, "-c"],
+        },
+    )
+
+    started = manager.context.tools.call(
+        "background_run",
+        {"command": "print('extension output')"},
+    )
+    executor = manager.context.services["background"]
+    result = wait_for_background(executor, 1)
+    notification = executor.drain()[0]
+
+    assert "Started background task #1" in started
+    assert result["status"] == "completed"
+    assert "extension output" in notification["message"]
+    assert installation.tools == ["background_run", "background_poll"]
+    assert set(installation.capabilities) == {
+        "background.executor",
+        "notifications.background",
+        "notifications.source",
+        "tools.background",
+    }
+    manager.close()
+    assert executor.closed
+
+
+def test_background_extension_close_cancels_running_process(tmp_path):
+    manager = make_manager()
+    manager.install(
+        BackgroundExtension(),
+        {
+            "workspace_root": str(tmp_path),
+            "shell_command": [sys.executable, "-c"],
+        },
+    )
+    executor = manager.context.services["background"]
+    task_id = executor.run("import time; time.sleep(30)", timeout=60)
+
+    manager.close()
+
+    assert executor.poll(task_id)["status"] == "cancelled"
+    assert executor.closed
+
+
+def test_background_extension_confines_working_directory(tmp_path):
+    manager = make_manager()
+    manager.install(
+        BackgroundExtension(),
+        {
+            "workspace_root": str(tmp_path / "workspace"),
+            "shell_command": [sys.executable, "-c"],
+        },
+    )
+    executor = manager.context.services["background"]
+
+    with pytest.raises(PermissionError, match="escapes workspace"):
+        executor.run("print('no')", cwd=str(tmp_path))
+
+    manager.close()
+
+
+def test_scheduler_extension_installs_persistent_tools_and_service(tmp_path):
+    manager = make_manager()
+    installation = manager.install(
+        SchedulerExtension(),
+        {
+            "persist_path": str(tmp_path / "schedules.json"),
+            "start_checker": False,
+        },
+    )
+
+    created = manager.context.tools.call(
+        "schedule_create",
+        {"prompt": "Review changes", "delay_seconds": 60},
+    )
+    listed = manager.context.tools.call("schedule_list", {})
+    scheduler = manager.context.services["scheduler"]
+
+    assert "Created schedule #1" in created
+    assert "Review changes" in listed
+    assert installation.metadata["notification_source"] is True
+    assert set(installation.capabilities) == {
+        "notifications.scheduler",
+        "notifications.source",
+        "scheduler.service",
+        "tools.scheduler",
+    }
+    manager.close()
+    assert scheduler.closed
+    with pytest.raises(RuntimeError, match="closed"):
+        scheduler.create("Late", delay_seconds=1)
+
+
+def test_scheduler_extension_close_joins_checker_thread():
+    manager = make_manager()
+    manager.install(
+        SchedulerExtension(),
+        {"check_interval_seconds": 60},
+    )
+    scheduler = manager.context.services["scheduler"]
+    assert scheduler.checker_alive
+
+    manager.close()
+
+    assert not scheduler.checker_alive
+
+
+def test_scheduler_extension_rejects_conflicts_before_starting_service():
+    manager = make_manager()
+    manager.context.register_tool(
+        "schedule_list",
+        lambda args: "existing",
+        {
+            "type": "function",
+            "function": {
+                "name": "schedule_list",
+                "description": "Existing",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        },
+    )
+
+    with pytest.raises(ValueError, match="tool conflicts"):
+        manager.install(SchedulerExtension())
+
+    assert "scheduler" not in manager.context.services

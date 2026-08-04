@@ -9,18 +9,18 @@ import os
 from nanoharness.components.context.simple_context import SimpleContextManager
 from nanoharness.components.lifecycle import CompositeToolPolicy
 from app.adapters import OpenAIAdapter
-from app.background import BackgroundExecutor, register_background_tools
 from app.coding_evaluator import CodingAgentEvaluator
 from app.resilient_llm import ResilientLLM
-from app.scheduler import Scheduler, register_schedule_tools
 from nanoharness.components.state.json_store import JsonStateStore
 from nanoharness.core.base import HookStage
 from nanoharness.core.engine import NanoEngine
 from nanoharness.core.prompt import PromptManager
 from nanoharness.core.schema import AgentMessage
 from nanoharness.extensions import ExtensionContext, ExtensionManager
+from nanoharness.extensions.background import BackgroundExtension
 from nanoharness.extensions.memory import MemoryExtension
 from nanoharness.extensions.mcp import MCPExtension
+from nanoharness.extensions.scheduler import SchedulerExtension
 from nanoharness.extensions.skills import SkillsExtension
 
 from app.context import ManagedContext
@@ -108,6 +108,22 @@ def build_coding_engine(
     )
     skill_reg = extension_context.services["skills"]
 
+    # --- Long-lived notification services ---
+    scratch_dir = os.path.join(SANDBOX, "scratch")
+    extension_manager.install(
+        BackgroundExtension(),
+        {
+            "workspace_root": workspace_root,
+            "scratch_dir": scratch_dir,
+        },
+    )
+    extension_manager.install(
+        SchedulerExtension(),
+        {"persist_path": os.path.join(SANDBOX, "schedules.json")},
+    )
+    bg_executor = extension_context.services["background"]
+    scheduler = extension_context.services["scheduler"]
+
     # --- System prompt (five segments) ---
     prompt_builder = SystemPromptBuilder(
         prompts=prompts,
@@ -118,9 +134,6 @@ def build_coding_engine(
     system_prompt = prompt_builder.build()
 
     # --- Context (three-layer managed: spill → compress → summarize) ---
-    scratch_dir = os.path.join(SANDBOX, "scratch")
-    bg_executor = BackgroundExecutor(workspace_root, scratch_dir=scratch_dir)
-    scheduler = Scheduler(persist_path=os.path.join(SANDBOX, "schedules.json"))
     teammate_manager = TeammateManager(
         llm_client=raw_llm,
         registry=tools,
@@ -131,16 +144,8 @@ def build_coding_engine(
         inner=SimpleContextManager(system_prompt=system_prompt),
         scratch_dir=scratch_dir,
         llm_client=raw_llm,
-        bg_executor=bg_executor,
-        scheduler=scheduler,
-        teammate_manager=teammate_manager,
+        notification_sources=[bg_executor, scheduler, teammate_manager],
     )
-
-    # --- Background execution tools ---
-    register_background_tools(registry=tools, bg_executor=bg_executor)
-
-    # --- Scheduled task tools ---
-    register_schedule_tools(registry=tools, scheduler=scheduler)
 
     # --- Team tools ---
     register_team_tools(registry=tools, tm=teammate_manager)

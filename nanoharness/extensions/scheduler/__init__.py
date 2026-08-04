@@ -1,15 +1,13 @@
-"""Compatibility facade for the reusable local Scheduler extension."""
-
-from nanoharness.extensions.scheduler import (
-    Scheduler,
+from nanoharness.extensions.scheduler.extension import (
     SchedulerExtension,
     SchedulerExtensionConfig,
-    cron_matches,
     register_schedule_tools,
 )
 from nanoharness.extensions.scheduler.scheduler import (
+    Scheduler,
     _field_matches,
     _schedule_notification,
+    cron_matches,
 )
 
 __all__ = [

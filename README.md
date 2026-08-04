@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-580%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-586%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -97,8 +97,10 @@ nanoharness/
   extensions/            # Reusable capability packages
     base.py              #   Manifest, config, install, close, and receipt contracts
     manager.py           #   Dependency/conflict validation + inventory/lifecycle
+    background/          #   Managed shell processes + completion notifications
     memory/              #   FileMemoryManager + MemoryExtension
     mcp/                 #   MCP stdio clients + dynamic MCP tools
+    scheduler/           #   Persistent cron/delay scheduling service
     skills/              #   SkillRegistry + SkillsExtension
   utils/                 # get_logger, count_tokens
 configs/
@@ -107,7 +109,7 @@ configs/
 examples/
   coding_agent/          # Full-featured coding agent reference (434 tests)
   nano_loop/             # Evidence-gated Loop Engineering example (27 tests)
-tests/                   # 119 kernel tests
+tests/                   # 125 kernel tests
 ```
 
 ---
@@ -207,6 +209,7 @@ Extension Protocol 1.0 gives reusable capabilities a common white-box shape:
 - each extension exposes a Pydantic configuration schema before installation;
 - `ExtensionContext` is the explicit tool/service/capability installation surface;
 - `ExtensionInstallation` is a serializable receipt of installed tools and services;
+- `NotificationSourceProtocol` gives long-lived services one host-facing `drain()` contract;
 - `ExtensionManager.inspect()` returns the resolved capability inventory;
 - `ExtensionManager.close()` releases resource-owning extensions once, in reverse installation order.
 
@@ -227,9 +230,11 @@ Extracted capabilities currently include:
 
 - `MemoryExtension` — Markdown memory store plus save/recall/list tools;
 - `SkillsExtension` — directory discovery, metadata index, and on-demand instruction loading;
-- `MCPExtension` — official MCP SDK stdio sessions, dynamic tool discovery, redacted config receipts, and managed subprocess cleanup.
+- `MCPExtension` — official MCP SDK stdio sessions, dynamic tool discovery, redacted config receipts, and managed subprocess cleanup;
+- `BackgroundExtension` — bounded shell execution, workspace-confined working directories, completion notifications, and shutdown cancellation;
+- `SchedulerExtension` — persistent cron/delay prompts with a managed checker thread and fired notifications.
 
-The Coding Agent installs all three through `ExtensionManager`. Its old `app.memory`, `app.skills`, `app.mcp`, and tool-registration imports remain compatibility forwarding layers rather than duplicate implementations. MCP remains optional: install `nanoharness[mcp]` only for profiles that need external servers.
+The Coding Agent installs all five through `ExtensionManager`. Its old `app.memory`, `app.skills`, `app.mcp`, `app.background`, `app.scheduler`, and tool-registration imports remain compatibility forwarding layers rather than duplicate implementations. MCP remains optional: install `nanoharness[mcp]` only for profiles that need external servers.
 
 ---
 
@@ -268,7 +273,7 @@ See `examples/nano_loop/` for an outer-loop control plane that repeatedly create
 ## Testing
 
 ```bash
-# Kernel tests (119)
+# Kernel tests (125)
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # Coding agent tests (434: 291 UT + 143 ST)
@@ -280,7 +285,7 @@ cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**Total: 580 tests.** Kernel tests require only the kernel dependencies and pytest; real MCP stdio tests use the `mcp` optional dependency.
+**Total: 586 tests.** Kernel tests require only the kernel dependencies and pytest; real MCP stdio tests use the `mcp` optional dependency.
 
 ---
 

@@ -47,6 +47,7 @@ class ManagedContext(BaseContextManager):
         bg_executor=None,
         scheduler=None,
         teammate_manager=None,
+        notification_sources=None,
         spill_threshold: int = _SPILL_THRESHOLD,
         preview_lines: int = _PREVIEW_LINES,
         compress_chars: int = _COMPRESS_CHARS,
@@ -58,6 +59,12 @@ class ManagedContext(BaseContextManager):
         self._bg = bg_executor
         self._scheduler = scheduler
         self._tm = teammate_manager
+        self._notification_sources = list(notification_sources or [])
+        for source in (bg_executor, scheduler, teammate_manager):
+            if source is not None and all(
+                source is not existing for existing in self._notification_sources
+            ):
+                self._notification_sources.append(source)
         self._spill_threshold = spill_threshold
         self._preview_lines = preview_lines
         self._compress_chars = compress_chars
@@ -75,23 +82,10 @@ class ManagedContext(BaseContextManager):
         self._inner.add_message(msg)
 
     def get_full_context(self) -> List[dict]:
-        # Drain background task notifications before returning to the LLM
-        if self._bg:
-            for notif in self._bg.drain():
-                self._inner.add_message(AgentMessage(
-                    role="system",
-                    content=notif["message"],
-                ))
-        # Drain scheduled task notifications
-        if self._scheduler:
-            for notif in self._scheduler.drain():
-                self._inner.add_message(AgentMessage(
-                    role="system",
-                    content=notif["message"],
-                ))
-        # Drain teammate responses
-        if self._tm:
-            for notif in self._tm.drain():
+        # Any extension or app service exposing drain() can feed notices into
+        # the same context path without adding another constructor branch.
+        for source in self._notification_sources:
+            for notif in source.drain():
                 self._inner.add_message(AgentMessage(
                     role="system",
                     content=notif["message"],
