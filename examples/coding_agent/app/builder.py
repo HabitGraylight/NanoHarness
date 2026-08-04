@@ -20,12 +20,12 @@ from nanoharness.core.prompt import PromptManager
 from nanoharness.core.schema import AgentMessage
 from nanoharness.extensions import ExtensionContext, ExtensionManager
 from nanoharness.extensions.memory import MemoryExtension
+from nanoharness.extensions.skills import SkillsExtension
 
 from app.context import ManagedContext
 from app.hooks import build_hooks, build_tool_hooks
 from app.permissions import TerminalApprovalBroker, build_permissions
 from app.prompt_builder import SystemPromptBuilder
-from app.skills import SkillRegistry, register_skill_tool
 from app.subagent import register_task_tool
 from app.task_system import TaskBoard, register_task_tools
 from app.team import TeammateManager, register_team_tools
@@ -95,8 +95,11 @@ def build_coding_engine(
 
     # --- Skills ---
     skills_dir = os.path.join(workspace_root, "skills")
-    skill_reg = SkillRegistry(skills_dir)
-    register_skill_tool(registry=tools, skill_registry=skill_reg)
+    extension_manager.install(
+        SkillsExtension(),
+        {"directory": skills_dir},
+    )
+    skill_reg = extension_context.services["skills"]
 
     # --- System prompt (five segments) ---
     prompt_builder = SystemPromptBuilder(

@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-569%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-574%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -98,6 +98,7 @@ nanoharness/
     base.py              #   Manifest、配置、安装与回执协议
     manager.py           #   依赖/冲突校验与安装清单
     memory/              #   FileMemoryManager + MemoryExtension
+    skills/              #   SkillRegistry + SkillsExtension
   utils/                 # get_logger, count_tokens
 configs/
   prompts.yaml           # Prompt 模板
@@ -105,7 +106,7 @@ configs/
 examples/
   coding_agent/          # 完整 Coding Agent 参考（434 个测试）
   nano_loop/             # 证据驱动的 Loop Engineering 示例（27 个测试）
-tests/                   # 108 个内核测试
+tests/                   # 113 个内核测试
 ```
 
 ---
@@ -217,7 +218,12 @@ print(extensions.inspect())
 memory = context.services["memory"]
 ```
 
-`MemoryExtension` 是第一个完成提取的公共能力。Coding Agent 已直接使用它，原有 `app.memory` 和 `register_memory_tools()` 仅作为兼容转发层保留。
+目前已提取的公共能力包括：
+
+- `MemoryExtension` — Markdown 记忆存储，以及 save/recall/list 工具；
+- `SkillsExtension` — 目录发现、元数据索引和按需加载完整指令。
+
+Coding Agent 通过 `ExtensionManager` 安装两者；原有 `app.memory`、`app.skills` 和工具注册导入仅作为兼容转发层保留，不再维护重复实现。
 
 ---
 
@@ -256,7 +262,7 @@ def chat(self, messages, tools=None) -> LLMResponse: ...
 ## 测试
 
 ```bash
-# 内核测试（108 个）
+# 内核测试（113 个）
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # Coding Agent 测试（434 个：291 UT + 143 ST）
@@ -268,7 +274,7 @@ cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**共 569 个测试。** 内核测试只需要内核依赖与 pytest。
+**共 574 个测试。** 内核测试只需要内核依赖与 pytest。
 
 ---
 

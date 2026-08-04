@@ -42,8 +42,12 @@ class TestBuilderReturnsEngine:
         assert engine.context is not None
         assert engine.max_steps == 20
         inventory = engine.extension_manager.inspect()
-        assert inventory["extensions"][0]["name"] == "memory.file"
+        extension_names = {
+            extension["name"] for extension in inventory["extensions"]
+        }
+        assert extension_names == {"memory.file", "skills.directory"}
         assert "memory.store" in inventory["capabilities"]
+        assert "skills.registry" in inventory["capabilities"]
 
     def test_builder_has_tools(self, monkeypatch, tmp_path):
         """Engine has tools registered (file_read, search_code, etc.)."""

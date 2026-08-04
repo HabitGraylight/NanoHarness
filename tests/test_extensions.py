@@ -13,6 +13,7 @@ from nanoharness.extensions import (
     ExtensionManifest,
 )
 from nanoharness.extensions.memory import MemoryExtension
+from nanoharness.extensions.skills import SkillRegistry, SkillsExtension
 
 
 class DemoConfig(BaseModel):
@@ -192,3 +193,109 @@ def test_schema_first_registry_registration_accepts_argument_dictionary():
     )
 
     assert registry.call("join", {"left": "a", "right": "b"}) == "a:b"
+
+
+def write_skill(path, *, name="review", description="Review code", body="Read first"):
+    path.write_text(
+        "---\n"
+        f"name: {name}\n"
+        f"description: {description}\n"
+        "trigger: when reviewing\n"
+        "---\n"
+        f"# Instructions\n{body}\n",
+        encoding="utf-8",
+    )
+
+
+def test_skills_extension_installs_registry_and_dynamic_tool(tmp_path):
+    skills_dir = tmp_path / "skills"
+    skills_dir.mkdir()
+    write_skill(skills_dir / "review.md")
+    manager = make_manager()
+
+    installation = manager.install(
+        SkillsExtension(),
+        {"directory": str(skills_dir)},
+    )
+    result = manager.context.tools.call("skill", {"name": "review"})
+
+    assert "[Skill: review]" in result
+    assert "Read first" in result
+    assert manager.context.services["skills"].list_names() == ["review"]
+    assert set(installation.capabilities) == {"skills.registry", "tools.skills"}
+    assert installation.metadata["skill_count"] == 1
+
+
+def test_skills_tool_schema_contains_discovery_metadata(tmp_path):
+    skills_dir = tmp_path / "skills"
+    skills_dir.mkdir()
+    write_skill(
+        skills_dir / "debug.md",
+        name="debugging",
+        description="Diagnose failures",
+    )
+    manager = make_manager()
+    manager.install(SkillsExtension(), {"directory": str(skills_dir)})
+
+    schema = manager.context.tools.get_tool_schemas()[0]
+    description = schema["function"]["description"]
+
+    assert "debugging" in description
+    assert "Diagnose failures" in description
+
+
+def test_skills_extension_supports_custom_pattern_service_and_tool(tmp_path):
+    skills_dir = tmp_path / "skills"
+    skills_dir.mkdir()
+    write_skill(skills_dir / "include.skill.md", name="included")
+    write_skill(skills_dir / "exclude.md", name="excluded")
+    manager = make_manager()
+
+    installation = manager.install(
+        SkillsExtension(),
+        {
+            "directory": str(skills_dir),
+            "pattern": "*.skill.md",
+            "service_name": "project_skills",
+            "tool_name": "load_project_skill",
+        },
+    )
+
+    assert installation.tools == ["load_project_skill"]
+    assert installation.services == ["project_skills"]
+    assert manager.context.services["project_skills"].list_names() == ["included"]
+
+
+def test_skills_extension_rejects_tool_conflict_before_service_install(tmp_path):
+    manager = make_manager()
+    manager.context.register_tool(
+        "skill",
+        lambda args: "existing",
+        {
+            "type": "function",
+            "function": {
+                "name": "skill",
+                "description": "Existing",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        },
+    )
+
+    with pytest.raises(ValueError, match="tool conflicts"):
+        manager.install(
+            SkillsExtension(),
+            {"directory": str(tmp_path / "skills")},
+        )
+
+    assert "skills" not in manager.context.services
+
+
+def test_skill_registry_reload_discovers_new_files(tmp_path):
+    skills_dir = tmp_path / "skills"
+    skills_dir.mkdir()
+    registry = SkillRegistry(str(skills_dir))
+    write_skill(skills_dir / "new.md", name="new-skill")
+
+    registry.reload()
+
+    assert registry.list_names() == ["new-skill"]

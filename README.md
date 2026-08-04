@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-569%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-574%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -98,6 +98,7 @@ nanoharness/
     base.py              #   Manifest, config, install, and receipt contracts
     manager.py           #   Dependency/conflict validation + inventory
     memory/              #   FileMemoryManager + MemoryExtension
+    skills/              #   SkillRegistry + SkillsExtension
   utils/                 # get_logger, count_tokens
 configs/
   prompts.yaml           # Prompt templates
@@ -105,7 +106,7 @@ configs/
 examples/
   coding_agent/          # Full-featured coding agent reference (434 tests)
   nano_loop/             # Evidence-gated Loop Engineering example (27 tests)
-tests/                   # 108 kernel tests
+tests/                   # 113 kernel tests
 ```
 
 ---
@@ -219,7 +220,12 @@ print(extensions.inspect())
 memory = context.services["memory"]
 ```
 
-`MemoryExtension` is the first extracted capability. The Coding Agent uses it directly, while its old `app.memory` and `register_memory_tools()` imports remain compatibility forwarding layers.
+Extracted capabilities currently include:
+
+- `MemoryExtension` — Markdown memory store plus save/recall/list tools;
+- `SkillsExtension` — directory discovery, metadata index, and on-demand instruction loading.
+
+The Coding Agent installs both through `ExtensionManager`. Its old `app.memory`, `app.skills`, and tool-registration imports remain compatibility forwarding layers rather than duplicate implementations.
 
 ---
 
@@ -258,7 +264,7 @@ See `examples/nano_loop/` for an outer-loop control plane that repeatedly create
 ## Testing
 
 ```bash
-# Kernel tests (108)
+# Kernel tests (113)
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # Coding agent tests (434: 291 UT + 143 ST)
@@ -270,7 +276,7 @@ cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**Total: 569 tests.** Kernel tests require only the kernel dependencies and pytest.
+**Total: 574 tests.** Kernel tests require only the kernel dependencies and pytest.
 
 ---
 

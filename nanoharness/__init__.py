@@ -76,3 +76,9 @@ from nanoharness.extensions.memory import (
     MemoryExtension,
     MemoryExtensionConfig,
 )
+from nanoharness.extensions.skills import (
+    SkillEntry,
+    SkillRegistry,
+    SkillsExtension,
+    SkillsExtensionConfig,
+)
