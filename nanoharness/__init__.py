@@ -104,3 +104,18 @@ from nanoharness.extensions.skills import (
     SkillsExtension,
     SkillsExtensionConfig,
 )
+from nanoharness.extensions.tasks import (
+    TaskBoard,
+    TaskExtension,
+    TaskExtensionConfig,
+    TaskStatus,
+    is_claimable,
+    is_ready,
+    make_task,
+)
+from nanoharness.extensions.worktrees import (
+    TaskBoardBindingProtocol,
+    WorktreeExtension,
+    WorktreeExtensionConfig,
+    WorktreeRegistry,
+)

@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-586%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-592%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -102,14 +102,16 @@ nanoharness/
     mcp/                 #   MCP stdio clients + dynamic MCP tools
     scheduler/           #   Persistent cron/delay scheduling service
     skills/              #   SkillRegistry + SkillsExtension
+    tasks/               #   Persistent dependency-aware Task Board
+    worktrees/           #   Git worktree lanes bound to Task records
   utils/                 # get_logger, count_tokens
 configs/
   prompts.yaml           # Prompt templates
   scripts/               # Shell-script tools (auto-discovered, 27 tools)
 examples/
-  coding_agent/          # Full-featured coding agent reference (434 tests)
+  coding_agent/          # Full-featured coding agent reference (435 tests)
   nano_loop/             # Evidence-gated Loop Engineering example (27 tests)
-tests/                   # 125 kernel tests
+tests/                   # 130 kernel tests
 ```
 
 ---
@@ -210,7 +212,7 @@ Extension Protocol 1.0 gives reusable capabilities a common white-box shape:
 - `ExtensionContext` is the explicit tool/service/capability installation surface;
 - `ExtensionInstallation` is a serializable receipt of installed tools and services;
 - `NotificationSourceProtocol` gives long-lived services one host-facing `drain()` contract;
-- `ExtensionManager.inspect()` returns the resolved capability inventory;
+- `ExtensionManager.inspect()` returns capabilities, services, receipts, and resolved dependency edges;
 - `ExtensionManager.close()` releases resource-owning extensions once, in reverse installation order.
 
 ```python
@@ -232,9 +234,11 @@ Extracted capabilities currently include:
 - `SkillsExtension` — directory discovery, metadata index, and on-demand instruction loading;
 - `MCPExtension` — official MCP SDK stdio sessions, dynamic tool discovery, redacted config receipts, and managed subprocess cleanup;
 - `BackgroundExtension` — bounded shell execution, workspace-confined working directories, completion notifications, and shutdown cancellation;
-- `SchedulerExtension` — persistent cron/delay prompts with a managed checker thread and fired notifications.
+- `SchedulerExtension` — persistent cron/delay prompts with a managed checker thread and fired notifications;
+- `TaskExtension` — persistent dependency-aware tasks, claims, roles, and schema-first task tools;
+- `WorktreeExtension` — audited Git execution lanes with `requires=["tasks.board"]` and task binding.
 
-The Coding Agent installs all five through `ExtensionManager`. Its old `app.memory`, `app.skills`, `app.mcp`, `app.background`, `app.scheduler`, and tool-registration imports remain compatibility forwarding layers rather than duplicate implementations. MCP remains optional: install `nanoharness[mcp]` only for profiles that need external servers.
+The Coding Agent installs all seven through `ExtensionManager`. Its former app-local extension modules remain compatibility forwarding layers rather than duplicate implementations. MCP remains optional: install `nanoharness[mcp]` only for profiles that need external servers.
 
 ---
 
@@ -273,10 +277,10 @@ See `examples/nano_loop/` for an outer-loop control plane that repeatedly create
 ## Testing
 
 ```bash
-# Kernel tests (125)
+# Kernel tests (130)
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
-# Coding agent tests (434: 291 UT + 143 ST)
+# Coding agent tests (435: 291 UT + 144 ST)
 cd examples/coding_agent
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
@@ -285,7 +289,7 @@ cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**Total: 586 tests.** Kernel tests require only the kernel dependencies and pytest; real MCP stdio tests use the `mcp` optional dependency.
+**Total: 592 tests.** Kernel tests require only the kernel dependencies and pytest; real MCP stdio tests use the `mcp` optional dependency.
 
 ---
 

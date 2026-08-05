@@ -1,16 +1,17 @@
-"""Compatibility facade for the reusable Task Board extension."""
-
-from nanoharness.extensions.tasks import (
+from nanoharness.extensions.tasks.board import (
     TaskBoard,
-    TaskExtension,
-    TaskExtensionConfig,
     TaskStatus,
+    _new_id,
+    _task_allows_role,
     is_claimable,
     is_ready,
     make_task,
+)
+from nanoharness.extensions.tasks.extension import (
+    TaskExtension,
+    TaskExtensionConfig,
     register_task_tools,
 )
-from nanoharness.extensions.tasks.board import _new_id, _task_allows_role
 
 __all__ = [
     "TaskBoard",

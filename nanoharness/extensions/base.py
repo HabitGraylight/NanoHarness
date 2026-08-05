@@ -30,6 +30,8 @@ class ExtensionInstallation(BaseModel):
     name: str
     version: str
     capabilities: List[str] = Field(default_factory=list)
+    requires: List[str] = Field(default_factory=list)
+    conflicts: List[str] = Field(default_factory=list)
     tools: List[str] = Field(default_factory=list)
     services: List[str] = Field(default_factory=list)
     config: Dict[str, Any] = Field(default_factory=dict)

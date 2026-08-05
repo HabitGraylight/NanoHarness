@@ -1,13 +1,11 @@
-"""Compatibility facade for the reusable Git Worktree extension."""
-
-from nanoharness.extensions.worktrees import (
-    TaskBoardBindingProtocol,
+from nanoharness.extensions.worktrees.extension import (
     WorktreeExtension,
     WorktreeExtensionConfig,
-    WorktreeRegistry,
     register_worktree_tools,
 )
 from nanoharness.extensions.worktrees.registry import (
+    TaskBoardBindingProtocol,
+    WorktreeRegistry,
     _EVENTS_FILE,
     _INDEX_FILE,
     _WT_DIR,

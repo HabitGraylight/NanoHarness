@@ -93,11 +93,11 @@ coding_agent/
 │   ├── scheduler.py       #   Compatibility facade → nanoharness.extensions.scheduler
 │   ├── skills.py          #   Markdown skill discovery and loading
 │   ├── subagent.py        #   Subagent delegation with read-only tool subset
-│   ├── task_system.py     #   Task board with dependency chains + worktree binding
+│   ├── task_system.py     #   Compatibility facade → nanoharness.extensions.tasks
 │   ├── team.py            #   Long-lived teammate system (daemon threads)
 │   ├── tools.py           #   Top-level tool assembly
 │   ├── ui.py              #   REPL loop + readline + history
-│   └── worktree.py        #   Git worktree task isolation
+│   └── worktree.py        #   Compatibility facade → nanoharness.extensions.worktrees
 ├── configs/               # Runtime configuration
 │   ├── mcp_servers.json   #   MCP server discovery config
 │   └── scripts/           #   27 shell script tools (*.sh)
@@ -111,7 +111,7 @@ coding_agent/
 └── tests/                 # Test suite
     ├── conftest.py        #   Shared fixtures + path setup
     ├── ut/                #   Unit tests (15 files, 291 tests)
-    └── st/                #   System/integration tests (11 files, 143 tests)
+    └── st/                #   System/integration tests (11 files, 144 tests)
 ```
 
 ## Architecture
@@ -135,8 +135,8 @@ Key subsystems (all app-layer, no kernel changes):
 | Subsystem | Module | Purpose |
 |---|---|---|
 | **Memory** | `memory.py` | File-based `.memory/` directory, YAML frontmatter, keyword search |
-| **Tasks** | `task_system.py` | Task board with dependency chains, status transitions, JSON persistence |
-| **Worktrees** | `worktree.py` | Git worktree per task — isolated execution lanes |
+| **Tasks** | `nanoharness.extensions.tasks` | Persistent dependencies, status transitions, claims, and role-aware ownership |
+| **Worktrees** | `nanoharness.extensions.worktrees` | Audited Git lanes with an explicit `tasks.board` capability dependency |
 | **Team** | `team.py` | Spawn teammates with independent Think-Act-Observe loops |
 | **Scheduler** | `nanoharness.extensions.scheduler` | Persistent cron/delay prompts and managed checker lifecycle |
 | **Background** | `nanoharness.extensions.background` | Bounded shell processes, completion notices, and shutdown cancellation |
@@ -186,14 +186,14 @@ Modes: `interactive` (default, asks user), `auto` (deny unknown), `yolo` (allow 
 ```bash
 # From examples/coding_agent/
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ut/ -v    # Unit tests (291)
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/st/ -v    # Integration tests (143)
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v       # All (434)
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/st/ -v    # Integration tests (144)
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v       # All (435)
 ```
 
 | Layer | Files | Tests | What's tested |
 |---|---|---|---|
 | **UT** | 15 | 291 | Pure logic: sandbox, permissions, cron matching, task CRUD, memory I/O, adapter protocol, evaluation detection |
-| **ST** | 11 | 143 | Real OS: git worktrees, subprocess MCP, threading, full engine wiring, builder assembly |
+| **ST** | 11 | 144 | Real OS: git worktrees, subprocess MCP, threading, full engine wiring, builder assembly |
 
 UT = no subprocess, no threading, no `time.sleep`. ST = real OS operations, multi-component integration.
 

@@ -56,12 +56,16 @@ class TestBuilderReturnsEngine:
             "memory.file",
             "scheduler.local",
             "skills.directory",
+            "tasks.board",
+            "worktrees.git",
         }
         assert "background.executor" in inventory["capabilities"]
         assert "memory.store" in inventory["capabilities"]
         assert "mcp.clients" in inventory["capabilities"]
         assert "scheduler.service" in inventory["capabilities"]
         assert "skills.registry" in inventory["capabilities"]
+        assert "tasks.board" in inventory["capabilities"]
+        assert "worktrees.registry" in inventory["capabilities"]
         engine.extension_manager.close()
 
     def test_builder_has_tools(self, monkeypatch, tmp_path):
@@ -91,6 +95,7 @@ class TestBuilderReturnsEngine:
         assert "save_memory" in tool_names
         assert "background_run" in tool_names
         assert "schedule_create" in tool_names
+        assert "worktree_create" in tool_names
         engine.extension_manager.close()
 
 

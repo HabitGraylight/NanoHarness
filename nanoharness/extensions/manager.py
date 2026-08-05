@@ -94,6 +94,9 @@ class ExtensionManager:
                 f"but declared {sorted(declared)}"
             )
 
+        installation.requires = list(manifest.requires)
+        installation.conflicts = list(manifest.conflicts)
+
         self.context.capabilities.update(installed)
         self._installations[manifest.name] = installation
         self._extensions[manifest.name] = extension
@@ -132,12 +135,27 @@ class ExtensionManager:
 
     def inspect(self) -> Dict[str, Any]:
         """Return a serialization-friendly resolved extension inventory."""
+        providers: Dict[str, list[str]] = {}
+        for installation in self._installations.values():
+            for capability in installation.capabilities:
+                providers.setdefault(capability, []).append(installation.name)
+        dependencies = []
+        for installation in self._installations.values():
+            for capability in installation.requires:
+                dependencies.append(
+                    {
+                        "extension": installation.name,
+                        "capability": capability,
+                        "providers": providers.get(capability, ["context"]),
+                    }
+                )
         return {
             "capabilities": sorted(self.context.capabilities),
             "extensions": [
                 installation.model_dump(mode="json")
                 for installation in self._installations.values()
             ],
+            "dependencies": dependencies,
             "services": sorted(self.context.services),
             "closed": self._closed,
         }

@@ -28,10 +28,10 @@ from app.hooks import build_hooks, build_tool_hooks
 from app.permissions import TerminalApprovalBroker, build_permissions
 from app.prompt_builder import SystemPromptBuilder
 from app.subagent import register_task_tool
-from app.task_system import TaskBoard, register_task_tools
+from nanoharness.extensions.tasks import TaskBoard, TaskExtension
 from app.team import TeammateManager, register_team_tools
 from app.tools import build_tools
-from app.worktree import WorktreeRegistry, register_worktree_tools
+from nanoharness.extensions.worktrees import WorktreeExtension
 
 # Runtime artifacts go here
 SANDBOX = os.path.join(os.path.dirname(os.path.dirname(__file__)), "sandbox")
@@ -84,15 +84,17 @@ def build_coding_engine(
     memory = extension_context.services["memory"]
 
     # --- Task board ---
-    task_board = TaskBoard(persist_path=os.path.join(SANDBOX, "tasks.json"))
-    register_task_tools(registry=tools, board=task_board)
+    extension_manager.install(
+        TaskExtension(),
+        {"persist_path": os.path.join(SANDBOX, "tasks.json")},
+    )
+    task_board = extension_context.services["tasks"]
 
     # --- Worktree (task isolation lanes) ---
-    wt_registry = WorktreeRegistry(
-        workspace_root=workspace_root,
-        task_board=task_board,
+    extension_manager.install(
+        WorktreeExtension(),
+        {"workspace_root": workspace_root},
     )
-    register_worktree_tools(registry=tools, wt_registry=wt_registry)
 
     # --- MCP tools (external tool servers) ---
     extension_manager.install(

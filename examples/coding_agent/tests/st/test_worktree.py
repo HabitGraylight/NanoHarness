@@ -94,6 +94,12 @@ class TestWorktreeRegistry:
         with pytest.raises(ValueError, match="already exists"):
             wt.create("dup", task_id=2)
 
+    def test_create_rejects_path_traversal_name(self, wt, tmp_git_repo):
+        with pytest.raises(ValueError, match="cannot contain path separators"):
+            wt.create("../escape", task_id=1)
+
+        assert not (tmp_git_repo / "escape").exists()
+
     def test_enter_updates_tracking(self, wt):
         wt.create("enter-test", task_id=1)
         before = time.time()

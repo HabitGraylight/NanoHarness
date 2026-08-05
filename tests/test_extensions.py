@@ -22,6 +22,8 @@ from nanoharness.extensions.memory import MemoryExtension
 from nanoharness.extensions.skills import SkillRegistry, SkillsExtension
 from nanoharness.extensions.background import BackgroundExtension
 from nanoharness.extensions.scheduler import SchedulerExtension
+from nanoharness.extensions.tasks import TaskExtension
+from nanoharness.extensions.worktrees import WorktreeExtension
 
 
 class DemoConfig(BaseModel):
@@ -629,3 +631,117 @@ def test_scheduler_extension_rejects_conflicts_before_starting_service():
         manager.install(SchedulerExtension())
 
     assert "scheduler" not in manager.context.services
+
+
+def test_task_extension_installs_board_and_dependency_tools(tmp_path):
+    manager = make_manager()
+    installation = manager.install(
+        TaskExtension(),
+        {"persist_path": str(tmp_path / "tasks.json")},
+    )
+
+    created = manager.context.tools.call(
+        "task_create",
+        {"subject": "Design protocol"},
+    )
+    listed = manager.context.tools.call("task_list", {})
+
+    assert "Created task #1" in created
+    assert "Design protocol" in listed
+    assert manager.context.services["tasks"].get(1)["subject"] == "Design protocol"
+    assert installation.tools == [
+        "task_create",
+        "task_list",
+        "task_update",
+        "task_complete",
+    ]
+    assert set(installation.capabilities) == {"tasks.board", "tools.tasks"}
+
+
+def test_worktree_extension_requires_task_capability(tmp_path):
+    manager = make_manager()
+
+    with pytest.raises(ExtensionDependencyError, match="tasks.board"):
+        manager.install(
+            WorktreeExtension(),
+            {"workspace_root": str(tmp_path)},
+        )
+
+    assert not (tmp_path / ".worktrees").exists()
+
+
+def test_task_then_worktree_extensions_expose_resolved_dependency_graph(tmp_path):
+    manager = make_manager()
+    manager.install(TaskExtension())
+    installation = manager.install(
+        WorktreeExtension(),
+        {"workspace_root": str(tmp_path)},
+    )
+
+    inventory = manager.inspect()
+
+    assert [item["name"] for item in inventory["extensions"]] == [
+        "tasks.board",
+        "worktrees.git",
+    ]
+    assert inventory["dependencies"] == [
+        {
+            "extension": "worktrees.git",
+            "capability": "tasks.board",
+            "providers": ["tasks.board"],
+        }
+    ]
+    assert inventory["extensions"][1]["requires"] == ["tasks.board"]
+    assert installation.tools == [
+        "worktree_create",
+        "worktree_enter",
+        "worktree_run",
+        "worktree_closeout",
+        "worktree_list",
+    ]
+    assert manager.context.services["worktrees"]._task_board is (
+        manager.context.services["tasks"]
+    )
+    assert (tmp_path / ".worktrees").is_dir()
+
+
+def test_worktree_extension_rejects_service_mapping_mismatch(tmp_path):
+    manager = make_manager()
+    manager.install(TaskExtension())
+
+    with pytest.raises(ValueError, match="requires task service"):
+        manager.install(
+            WorktreeExtension(),
+            {
+                "workspace_root": str(tmp_path),
+                "task_service_name": "project_tasks",
+            },
+        )
+
+    assert "worktrees" not in manager.context.services
+    assert not (tmp_path / ".worktrees").exists()
+
+
+def test_worktree_extension_preflights_tools_before_filesystem_changes(tmp_path):
+    manager = make_manager()
+    manager.install(TaskExtension())
+    manager.context.register_tool(
+        "worktree_list",
+        lambda args: "existing",
+        {
+            "type": "function",
+            "function": {
+                "name": "worktree_list",
+                "description": "Existing",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        },
+    )
+
+    with pytest.raises(ValueError, match="tool conflicts"):
+        manager.install(
+            WorktreeExtension(),
+            {"workspace_root": str(tmp_path)},
+        )
+
+    assert not (tmp_path / ".worktrees").exists()
