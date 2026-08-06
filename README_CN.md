@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-597%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-611%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -106,14 +106,16 @@ nanoharness/
     tasks/               #   持久化依赖型 Task Board
     teams/               #   托管长期队友与 Inbox 协议
     worktrees/           #   与 Task 绑定的 Git worktree lane
+  profiles/              # HarnessSpec、Catalog、Builder 与 validate/explain CLI
   utils/                 # get_logger, count_tokens
 configs/
   prompts.yaml           # Prompt 模板
   scripts/               # Shell 脚本工具（自动发现，27 个）
 examples/
   coding_agent/          # 完整 Coding Agent 参考（435 个测试）
+  harness_profiles/      # 声明式白箱组合示例
   nano_loop/             # 证据驱动的 Loop Engineering 示例（27 个测试）
-tests/                   # 135 个内核/公共扩展测试
+tests/                   # 149 个内核/扩展/Profile 测试
 ```
 
 ---
@@ -242,6 +244,39 @@ extensions.close()
 
 Coding Agent 通过 `ExtensionManager` 安装九个公共扩展；Team 与 Subagent 还显式声明宿主运行时依赖，因此 `inspect()` 能同时显示扩展提供与宿主提供的依赖边。原应用层模块仅作为兼容转发层保留，不再维护重复实现。MCP 仍是可选能力，只有需要外部服务器的 Profile 才需安装 `nanoharness[mcp]`。
 
+## Harness Profiles
+
+HarnessSpec 1.0 将 Extension 组合与 ETCSLV 运行时绑定表达为可移植的
+YAML、TOML 或 JSON 配方。声明中只记录宿主提供的 Capability 与 Service
+名称，不会尝试序列化真实 LLM 或 Context 对象。
+
+`HarnessBuilder` 可以无副作用地校验配置，按能力依赖计算确定性的安装顺序，
+解释 Provider、冲突与配置 Schema，安装 Extension，并将最终工具注册表和宿主
+Service 绑定为 `NanoEngine`。
+
+```bash
+python -m nanoharness.profiles validate examples/harness_profiles/coding_team.yaml
+python -m nanoharness.profiles explain examples/harness_profiles/coding_team.yaml
+python -m nanoharness.profiles catalog
+```
+
+```python
+from nanoharness import HarnessBuilder, HarnessSpec
+
+spec = HarnessSpec.from_file("examples/harness_profiles/coding_team.yaml")
+builder = HarnessBuilder()
+
+validation = builder.validate(spec)  # 不创建文件、工具或线程
+explanation = builder.explain(spec)  # Manifest、Schema、顺序与依赖边
+
+# build = builder.build(spec, context=host_extension_context)
+# engine = build.engine              # spec.engine 已声明时生成
+# build.close()                      # 关闭所有资源型 Extension
+```
+
+`explain` 会脱敏常见密钥字段及完整 `env` 映射。离线校验把声明的宿主需求
+视为假设；`build()` 会在安装任何 Extension 前检查真实 Capability 与 Service。
+
 ---
 
 ## 工具
@@ -279,7 +314,7 @@ def chat(self, messages, tools=None) -> LLMResponse: ...
 ## 测试
 
 ```bash
-# 内核与公共扩展测试（135 个）
+# 内核、公共扩展与 Profile 测试（149 个）
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # Coding Agent 测试（435 个：291 UT + 144 ST）
@@ -291,7 +326,7 @@ cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**共 597 个测试。** 内核测试只需要内核依赖与 pytest；真实 MCP stdio 测试使用 `mcp` 可选依赖。
+**共 611 个测试。** 内核测试只需要内核依赖与 pytest；真实 MCP stdio 测试使用 `mcp` 可选依赖。
 
 ---
 

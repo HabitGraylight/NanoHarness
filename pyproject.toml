@@ -10,7 +10,11 @@ requires-python = ">=3.10"
 dependencies = [
     "pydantic>=2.0",
     "PyYAML>=6.0",
+    "tomli>=2.0; python_version < '3.11'",
 ]
+
+[project.scripts]
+nanoharness = "nanoharness.profiles.cli:main"
 
 [project.optional-dependencies]
 openai = ["openai>=1.0"]

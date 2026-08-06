@@ -136,3 +136,26 @@ from nanoharness.extensions.worktrees import (
     WorktreeExtensionConfig,
     WorktreeRegistry,
 )
+
+# ── Harness profiles ──
+
+from nanoharness.profiles import (
+    HARNESS_SPEC_VERSION,
+    DependencyEdge,
+    EngineSpec,
+    ExtensionCatalog,
+    ExtensionSpec,
+    HarnessBuild,
+    HarnessBuildError,
+    HarnessBuilder,
+    HarnessExplanation,
+    HarnessIssue,
+    HarnessSpec,
+    HarnessSpecError,
+    HarnessValidation,
+    HostRequirements,
+    PlannedExtension,
+    explain_harness,
+    load_harness_spec,
+    validate_harness,
+)

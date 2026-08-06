@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-597%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-611%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -106,14 +106,16 @@ nanoharness/
     tasks/               #   Persistent dependency-aware Task Board
     teams/               #   Managed long-lived teammates + inbox protocol
     worktrees/           #   Git worktree lanes bound to Task records
+  profiles/              # HarnessSpec, catalog, builder, validate/explain CLI
   utils/                 # get_logger, count_tokens
 configs/
   prompts.yaml           # Prompt templates
   scripts/               # Shell-script tools (auto-discovered, 27 tools)
 examples/
   coding_agent/          # Full-featured coding agent reference (435 tests)
+  harness_profiles/      # Declarative white-box composition examples
   nano_loop/             # Evidence-gated Loop Engineering example (27 tests)
-tests/                   # 135 kernel/extension tests
+tests/                   # 149 kernel/extension/profile tests
 ```
 
 ---
@@ -244,6 +246,41 @@ Extracted capabilities currently include:
 
 The Coding Agent installs all nine through `ExtensionManager`. Team and Subagent declare their host/runtime dependencies explicitly, so `inspect()` shows both extension-provided and host-provided edges. Their former app-local modules remain compatibility forwarding layers rather than duplicate implementations. MCP remains optional: install `nanoharness[mcp]` only for profiles that need external servers.
 
+## Harness Profiles
+
+HarnessSpec 1.0 turns extension composition and ETCSLV runtime bindings into a
+portable YAML, TOML, or JSON recipe. The declaration names host-provided
+capabilities/services without serializing live LLM or Context objects.
+
+`HarnessBuilder` validates configs without side effects, resolves capability
+dependencies into a deterministic installation order, explains providers and
+conflicts, installs extensions, and can bind the resulting tool registry plus
+host services into a `NanoEngine`.
+
+```bash
+python -m nanoharness.profiles validate examples/harness_profiles/coding_team.yaml
+python -m nanoharness.profiles explain examples/harness_profiles/coding_team.yaml
+python -m nanoharness.profiles catalog
+```
+
+```python
+from nanoharness import HarnessBuilder, HarnessSpec
+
+spec = HarnessSpec.from_file("examples/harness_profiles/coding_team.yaml")
+builder = HarnessBuilder()
+
+validation = builder.validate(spec)  # no files, tools, or threads are created
+explanation = builder.explain(spec)  # manifests, schemas, order, dependency edges
+
+# build = builder.build(spec, context=host_extension_context)
+# engine = build.engine              # when spec.engine is declared
+# build.close()                      # closes installed resource extensions
+```
+
+`explain` redacts common secret fields and complete `env` mappings. Offline
+validation treats declared host requirements as assumptions; `build()` checks
+the real capability and service bindings before installing anything.
+
 ---
 
 ## Tools
@@ -281,7 +318,7 @@ See `examples/nano_loop/` for an outer-loop control plane that repeatedly create
 ## Testing
 
 ```bash
-# Kernel and public extension tests (135)
+# Kernel, extension, and profile tests (149)
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # Coding agent tests (435: 291 UT + 144 ST)
@@ -293,7 +330,7 @@ cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**Total: 597 tests.** Kernel tests require only the kernel dependencies and pytest; real MCP stdio tests use the `mcp` optional dependency.
+**Total: 611 tests.** Kernel tests require only the kernel dependencies and pytest; real MCP stdio tests use the `mcp` optional dependency.
 
 ---
 

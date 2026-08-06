@@ -1,0 +1,31 @@
+schema_version: "1.0"
+name: nano-coding-team
+description: >-
+  White-box composition of one-shot delegation, long-lived teammates,
+  task coordination, and isolated Git worktree lanes.
+
+host:
+  capabilities:
+    - runtime.llm
+    - runtime.agent_llm
+    - runtime.context
+  services:
+    - llm.raw
+    - llm.agent
+    - context.agent
+
+# Requests may be written in conceptual order. HarnessBuilder resolves the
+# dependency-safe installation order without installing anything during explain.
+extensions:
+  - name: teams.runtime
+    config:
+      workspace_root: .
+  - name: subagents.delegate
+  - name: worktrees.git
+    config:
+      workspace_root: .
+  - name: tasks.board
+
+metadata:
+  style: composable-coding
+  white_box: true
