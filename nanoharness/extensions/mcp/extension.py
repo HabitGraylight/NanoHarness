@@ -197,7 +197,7 @@ def install_mcp_tools(
 
 
 def register_mcp_tools(registry, config_path: str) -> List[MCPClient]:
-    """Compatibility installer; callers own and must disconnect the clients."""
+    """Install configured MCP tools; callers must disconnect the clients."""
     pool = install_mcp_tools(
         registry,
         PluginLoader(config_path).load_server_configs(),

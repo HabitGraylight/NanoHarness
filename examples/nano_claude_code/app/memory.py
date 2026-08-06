@@ -1,4 +1,4 @@
-"""Compatibility imports for the reusable NanoHarness Memory extension."""
+"""NanoClaudeCode exports for the reusable Memory extension."""
 
 from nanoharness.extensions.memory import FileMemoryManager, MemoryEntry
 

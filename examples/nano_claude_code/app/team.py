@@ -1,4 +1,4 @@
-"""Compatibility facade for the reusable NanoHarness team extension."""
+"""NanoClaudeCode exports for the reusable Team extension."""
 
 from nanoharness.extensions.teams import (
     RequestTracker,

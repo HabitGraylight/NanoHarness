@@ -1,4 +1,4 @@
-"""Compatibility facade for the reusable Task Board extension."""
+"""NanoClaudeCode exports for the reusable Task Board extension."""
 
 from nanoharness.extensions.tasks import (
     TaskBoard,

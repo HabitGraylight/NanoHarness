@@ -1,4 +1,4 @@
-"""Compatibility facade for the reusable local Scheduler extension."""
+"""NanoClaudeCode exports for the reusable Scheduler extension."""
 
 from nanoharness.extensions.scheduler import (
     Scheduler,

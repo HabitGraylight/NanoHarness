@@ -164,5 +164,5 @@ def _list_files_builder(args: Dict) -> List[str]:
 
 
 def register_memory_tools(registry: DispatchRegistry, memory):
-    """Backward-compatible wrapper around the reusable Memory extension."""
+    """Register the reusable Memory tools on the local dispatch registry."""
     return register_extension_memory_tools(registry, memory)

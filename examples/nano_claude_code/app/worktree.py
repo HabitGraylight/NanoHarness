@@ -1,4 +1,4 @@
-"""Compatibility facade for the reusable Git Worktree extension."""
+"""NanoClaudeCode exports for the reusable Worktree extension."""
 
 from nanoharness.extensions.worktrees import (
     TaskBoardBindingProtocol,

@@ -1,4 +1,4 @@
-"""Compatibility imports for the reusable NanoHarness Skills extension."""
+"""NanoClaudeCode exports for the reusable Skills extension."""
 
 from nanoharness.extensions.skills import (
     SkillEntry,

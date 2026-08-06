@@ -1,4 +1,4 @@
-"""Compatibility facade for the reusable NanoHarness subagent extension."""
+"""NanoClaudeCode exports for the reusable Subagent extension."""
 
 from nanoharness.extensions.subagents import (
     FORK_SYSTEM_ADDON,

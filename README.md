@@ -210,7 +210,7 @@ Protocol v2.1 adds explicit boundaries around the tool lifecycle:
 - `NanoEngine.arun()` and `NanoEngine.astream()` provide async report and live-event surfaces;
 - `RunControl` provides cooperative cancellation and steering at safe step boundaries.
 
-The legacy `permissions=` and `tool_hooks=` constructor arguments remain supported. The Coding Agent builder now uses the typed policy and approval path.
+The legacy `permissions=` and `tool_hooks=` constructor arguments remain supported. NanoClaudeCode binds the typed policy and approval protocols through its application builder.
 
 ---
 
@@ -239,7 +239,7 @@ memory = context.services["memory"]
 extensions.close()
 ```
 
-Extracted capabilities currently include:
+Reusable capability packages include:
 
 - `MemoryExtension` — Markdown memory store plus save/recall/list tools;
 - `SkillsExtension` — directory discovery, metadata index, and on-demand instruction loading;
@@ -251,7 +251,7 @@ Extracted capabilities currently include:
 - `SubagentExtension` — one-shot read-only delegation with optional parent-context forking;
 - `WorktreeExtension` — audited Git execution lanes with `requires=["tasks.board"]` and task binding.
 
-NanoClaudeCode installs all nine through `ExtensionManager`. Team and Subagent declare their host/runtime dependencies explicitly, so `inspect()` shows both extension-provided and host-provided edges. Their former app-local modules remain compatibility forwarding layers rather than duplicate implementations. MCP remains optional: install `nanoharness[mcp]` only for profiles that need external servers.
+NanoClaudeCode installs all nine through `ExtensionManager`. Team and Subagent declare their host/runtime dependencies explicitly, so `inspect()` shows both extension-provided and host-provided edges. Its local modules expose the public extension APIs needed by the application. MCP remains optional: install `nanoharness[mcp]` only for profiles that need external servers.
 
 ## Harness Profiles
 
@@ -389,17 +389,6 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
 **Total: 636 tests.** Kernel tests require only the kernel dependencies and pytest; real MCP stdio tests use the `mcp` optional dependency.
-
----
-
-## Roadmap
-
-- Streaming LLM output
-- Async engine mode
-- Cross-process teammate transports
-- Context compaction strategies
-- Observability integration (OpenTelemetry / LangFuse)
-- Profile schema migrations and compatibility tooling
 
 ---
 

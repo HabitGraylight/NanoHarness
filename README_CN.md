@@ -208,7 +208,7 @@ NanoEngine.run(query)
 - `NanoEngine.arun()` 与 `NanoEngine.astream()` 分别提供异步报告和实时事件接口；
 - `RunControl` 在安全的步骤边界提供协作式取消与 Steering。
 
-旧的 `permissions=` 和 `tool_hooks=` 构造参数继续兼容；Coding Agent Builder 已切换到新的类型化策略与审批路径。
+旧的 `permissions=` 和 `tool_hooks=` 构造参数继续兼容；NanoClaudeCode 通过应用 Builder 绑定类型化策略与审批协议。
 
 ---
 
@@ -237,7 +237,7 @@ memory = context.services["memory"]
 extensions.close()
 ```
 
-目前已提取的公共能力包括：
+可复用能力包包括：
 
 - `MemoryExtension` — Markdown 记忆存储，以及 save/recall/list 工具；
 - `SkillsExtension` — 目录发现、元数据索引和按需加载完整指令；
@@ -249,7 +249,7 @@ extensions.close()
 - `SubagentExtension` — 单次只读委派，并可选择 fork 父上下文；
 - `WorktreeExtension` — 带审计事件的 Git 执行 lane，通过 `requires=["tasks.board"]` 显式依赖 Task Board。
 
-NanoClaudeCode 通过 `ExtensionManager` 安装九个公共扩展；Team 与 Subagent 还显式声明宿主运行时依赖，因此 `inspect()` 能同时显示扩展提供与宿主提供的依赖边。原应用层模块仅作为兼容转发层保留，不再维护重复实现。MCP 仍是可选能力，只有需要外部服务器的 Profile 才需安装 `nanoharness[mcp]`。
+NanoClaudeCode 通过 `ExtensionManager` 安装九个公共扩展；Team 与 Subagent 还显式声明宿主运行时依赖，因此 `inspect()` 能同时显示扩展提供与宿主提供的依赖边。其本地模块公开应用所需的公共 Extension API。MCP 仍是可选能力，只有需要外部服务器的 Profile 才需安装 `nanoharness[mcp]`。
 
 ## Harness Profiles
 
@@ -381,17 +381,6 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
 **共 636 个测试。** 内核测试只需要内核依赖与 pytest；真实 MCP stdio 测试使用 `mcp` 可选依赖。
-
----
-
-## 路线图
-
-- 流式 LLM 输出
-- 异步引擎模式
-- 跨进程队友传输层
-- 上下文压缩策略
-- 可观测性集成（OpenTelemetry / LangFuse）
-- Profile Schema 迁移与兼容工具
 
 ---
 

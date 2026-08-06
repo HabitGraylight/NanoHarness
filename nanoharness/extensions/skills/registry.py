@@ -87,5 +87,5 @@ class SkillRegistry:
         return f"[Skill: {skill.name}]\nTrigger: {skill.trigger}\n\n{skill.body}"
 
 
-# Compatibility with the original app-layer private helper.
+# Private alias used by application-level skill loaders.
 _parse_skill = parse_skill

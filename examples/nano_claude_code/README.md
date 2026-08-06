@@ -1,11 +1,9 @@
-# Coding Agent Example — NanoClaudeCode baseline
+# NanoClaudeCode
 
 A self-contained coding agent built on NanoHarness, with a terminal UI.
 
-This directory is the complete NanoClaudeCode example and its 435-test
-behavioral baseline. It owns the real provider-backed REPL and also includes a
-network-free `profile_demo.py`. See `MIGRATION.md` for the staged Profile
-assembly plan.
+This directory is a complete NanoClaudeCode example with a provider-backed REPL,
+a network-free `profile_demo.py`, and 435 tests.
 
 ## Quick Start
 
@@ -80,29 +78,31 @@ Features: colored output, readline support (arrow keys, history), persistent inp
 ```
 nano_claude_code/
 ├── main.py                # Entry point (REPL + single-shot)
+├── profile_demo.py        # Deterministic, network-free Profile run
+├── profile.yaml           # ETCSLV, policy, capability, and extension recipe
 ├── NanoCA.md              # Project instructions loaded into system prompt
 ├── app/                   # App layer — all coding-agent-specific logic
 │   ├── adapters.py        #   OpenAI-compatible LLM adapter
-│   ├── background.py      #   Compatibility facade → nanoharness.extensions.background
+│   ├── background.py      #   Local exports for nanoharness.extensions.background
 │   ├── builder.py         #   Engine assembly — wires all components
 │   ├── coding_evaluator.py#   V: error-loop/spinning/stagnation detection + LLM goal verification
 │   ├── context.py         #   Three-layer context: spill → compress → summarize
 │   ├── dispatch.py        #   Tool registry with path sandboxing
 │   ├── handlers.py        #   Script + Python tool registration
 │   ├── hooks.py           #   Lifecycle hooks + tool interception (BLOCK/INJECT)
-│   ├── mcp.py             #   Compatibility facade → nanoharness.extensions.mcp
+│   ├── mcp.py             #   NanoClaudeCode MCP handler adapter
 │   ├── memory.py          #   File-based memory (.memory/ directory)
 │   ├── permissions.py     #   4-step permission pipeline (deny/mode/allow/ask)
 │   ├── prompt_builder.py  #   Five-segment system prompt builder
 │   ├── resilient_llm.py   #   LLM wrapper: continuation, context compression, retry
-│   ├── scheduler.py       #   Compatibility facade → nanoharness.extensions.scheduler
+│   ├── scheduler.py       #   Local exports for nanoharness.extensions.scheduler
 │   ├── skills.py          #   Markdown skill discovery and loading
-│   ├── subagent.py        #   Compatibility facade → nanoharness.extensions.subagents
-│   ├── task_system.py     #   Compatibility facade → nanoharness.extensions.tasks
-│   ├── team.py            #   Compatibility facade → nanoharness.extensions.teams
+│   ├── subagent.py        #   Local exports for nanoharness.extensions.subagents
+│   ├── task_system.py     #   Local exports for nanoharness.extensions.tasks
+│   ├── team.py            #   Local exports for nanoharness.extensions.teams
 │   ├── tools.py           #   Top-level tool assembly
 │   ├── ui.py              #   REPL loop + readline + history
-│   └── worktree.py        #   Compatibility facade → nanoharness.extensions.worktrees
+│   └── worktree.py        #   Local exports for nanoharness.extensions.worktrees
 ├── configs/               # Runtime configuration
 │   ├── mcp_servers.json   #   MCP server discovery config
 │   └── scripts/           #   27 shell script tools (*.sh)
@@ -111,6 +111,7 @@ nano_claude_code/
 │   ├── debugging.md
 │   ├── refactoring.md
 │   └── test-writing.md
+├── scenarios/             # Deterministic Profile scenarios
 ├── sandbox/               # Runtime artifacts (gitignored)
 ├── nanoharness/           # Symlink → ../../nanoharness (shared kernel)
 └── tests/                 # Test suite
@@ -146,7 +147,7 @@ Key subsystems (public extensions plus app-level profile wiring, no kernel chang
 | **Scheduler** | `nanoharness.extensions.scheduler` | Persistent cron/delay prompts and managed checker lifecycle |
 | **Background** | `nanoharness.extensions.background` | Bounded shell processes, completion notices, and shutdown cancellation |
 | **Subagent** | `nanoharness.extensions.subagents` | One-shot focused delegation with a read-only tool subset and optional context fork |
-| **MCP** | `nanoharness.extensions.mcp` | Official SDK stdio sessions, dynamic tools, and managed process cleanup (`app/mcp.py` keeps the old imports) |
+| **MCP** | `nanoharness.extensions.mcp` | Official SDK stdio sessions, dynamic tools, and managed process cleanup |
 | **Skills** | `skills.py` | Markdown skill files with YAML frontmatter |
 | **Context** | `context.py` | Three-layer: spill large results → compress old → summarize when long |
 | **Resilient LLM** | `resilient_llm.py` | Continuation, context compression, exponential backoff |

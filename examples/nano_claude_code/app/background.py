@@ -1,4 +1,4 @@
-"""Compatibility facade for the reusable Background extension."""
+"""NanoClaudeCode exports for the reusable Background extension."""
 
 from nanoharness.extensions.background import (
     BackgroundExecutor,

@@ -37,7 +37,7 @@ class PluginLoader:
         return MCPServerFile.model_validate(data).servers
 
     def load_servers(self) -> List[Dict]:
-        """Compatibility view used by the original Coding Agent example."""
+        """Return dictionary records for application-level adapters."""
         return [
             server.model_dump(mode="json")
             for server in self.load_server_configs()

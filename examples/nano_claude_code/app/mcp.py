@@ -1,4 +1,4 @@
-"""Compatibility facade for the reusable NanoHarness MCP extension."""
+"""NanoClaudeCode adapter for the reusable MCP extension."""
 
 from typing import Dict
 
@@ -13,7 +13,7 @@ from app.dispatch import tool_result
 
 
 def mcp_handler(client: MCPClient, tool_name: str):
-    """Preserve the original Coding Agent ``tool_result`` handler API."""
+    """Adapt a portable MCP handler to the local ``tool_result`` API."""
     portable_handler = _portable_mcp_handler(client, tool_name)
 
     def handler(args: Dict) -> tool_result:

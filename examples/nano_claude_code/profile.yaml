@@ -1,7 +1,7 @@
 schema_version: "1.0"
 name: nano-claude-code
 description: >-
-  Interactive local coding harness derived from the existing Coding Agent.
+  Interactive local coding harness with session context and approval gates.
 
 host:
   capabilities:
