@@ -1,0 +1,77 @@
+schema_version: "1.0"
+name: nano-hermes
+description: >-
+  Persistent personal agent with curated memory, procedural skills, staged
+  self-improvement, scheduling, and isolated delegation.
+
+host:
+  capabilities:
+    - runtime.agent_llm
+    - runtime.context
+    - tools.workspace
+    - tools.skill_proposals
+    - surface.cli
+    - memory.curated
+    - learning.reflection
+    - skills.agent_managed
+    - channels.mock
+  services:
+    - llm.hermes
+    - context.persistent
+    - state.personal
+    - hooks.learning
+    - evaluator.reflection
+    - policy.hermes
+    - approval.review
+    - executor.personal
+    - events.artifacts
+
+engine:
+  llm_service: llm.hermes
+  context_service: context.persistent
+  state_service: state.personal
+  hooks_service: hooks.learning
+  evaluator_service: evaluator.reflection
+  policy_service: policy.hermes
+  approval_broker_service: approval.review
+  executor_service: executor.personal
+  event_sink_service: events.artifacts
+  max_steps: 10
+
+extensions:
+  - name: subagents.delegate
+    config:
+      llm_service_name: llm.hermes
+      context_service_name: context.persistent
+      max_turns: 8
+      tool_whitelist: [workspace_read]
+  - name: memory.file
+    config:
+      directory: "${runtime}/memory"
+      preview_chars: 400
+  - name: skills.directory
+    config:
+      directory: "${skills}"
+  - name: scheduler.local
+    config:
+      persist_path: "${runtime}/schedules.json"
+      start_checker: false
+  - name: background.shell
+    config:
+      workspace_root: "${workspace}"
+      scratch_dir: "${workspace}/.gallery/scratch"
+      max_concurrent: 2
+  - name: mcp.stdio
+    enabled: false
+    config:
+      servers: []
+
+metadata:
+  family: personal-agent
+  style: hermes
+  surface: persistent-cli
+  policy_mode: hermes
+  context_lifetime: persistent-session
+  learning_loop: session-review
+  skill_writes: staged-for-approval
+  inspiration: https://github.com/NousResearch/hermes-agent

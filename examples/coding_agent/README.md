@@ -1,6 +1,11 @@
-# Coding Agent Example
+# Coding Agent Example — NanoClaudeCode baseline
 
 A self-contained coding agent built on NanoHarness, with a terminal UI.
+
+This directory is the current NanoClaudeCode implementation and its 435-test
+behavioral baseline. The Harness Gallery references it instead of copying a
+second implementation. See `../harness_gallery/CODING_AGENT_MIGRATION.md` for
+the staged migration and compatibility plan.
 
 ## Quick Start
 

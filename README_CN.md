@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-621%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-631%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -113,9 +113,10 @@ configs/
   scripts/               # Shell 脚本工具（自动发现，27 个）
 examples/
   coding_agent/          # 完整 Coding Agent 参考（435 个测试）
+  harness_gallery/       # ClaudeCode、Codex、Hermes、OpenClaw Profile
   harness_profiles/      # 声明式白箱组合示例
   nano_loop/             # 证据驱动的 Loop Engineering 示例（27 个测试）
-tests/                   # 159 个内核/扩展/Profile 测试
+tests/                   # 169 个内核/扩展/Profile/Gallery 测试
 ```
 
 ---
@@ -287,6 +288,34 @@ explanation = builder.explain(spec)  # Manifest、Schema、顺序与依赖边
 
 ---
 
+## Harness Gallery
+
+`examples/harness_gallery/` 使用同一个无网络 Scenario 运行四种真实不同的 Profile：
+
+- **NanoClaudeCode** — 交互式、Session 导向的 Coding Harness，组合 Memory、
+  Skills、Task/Team 委派与写入审批；
+- **NanoCodex** — 受控 Plan → Execute → Review Coding Harness，组合 Task、
+  Worktree、Sandbox 与证据导向 Service；
+- **NanoHermes** — 持久个人 Agent，组合有界记忆、程序性 Skill、暂存式自我改进、
+  Scheduler 与隔离委派；
+- **NanoOpenClaw** — 常驻 Gateway 形态，声明 Console/Webhook/Mock Channel，
+  并组合 Memory、Scheduler 与 Background。
+
+```bash
+python examples/harness_gallery/main.py matrix
+python examples/harness_gallery/main.py run nano_claude_code
+python examples/harness_gallery/main.py run nano_codex
+python examples/harness_gallery/main.py run nano_hermes
+python examples/harness_gallery/main.py run nano_openclaw
+```
+
+确定性 `ScriptedLLM` 不需要 API Key 或网络。每次运行分别保存敏感的完整 Report
+和内容最小化 Trace。现有 `examples/coding_agent/` 继续作为拥有 435 项测试的
+NanoClaudeCode 行为基线；只有 M5.2 达到等价后才会降为兼容入口，不会复制出
+第二套同名实现。
+
+---
+
 ## 工具
 
 工具满足 `BaseToolRegistry` 接口，提供两个方法：`get_tool_schemas()` 和 `call(name, args)`。
@@ -313,7 +342,7 @@ def chat(self, messages, tools=None) -> LLMResponse: ...
 
 **自定义组件** — 继承任意 `Base*` ABC，注入 `NanoEngine`。
 
-完整参考见 `examples/coding_agent/`，其中组装了自定义 LLM 适配器、记忆策略、权限流水线、子 Agent 委派、技能加载和评估——全部在内核之上构建，无需修改内核。
+`examples/coding_agent/` 是当前 NanoClaudeCode 实现基线，其中组装了自定义 LLM 适配器、记忆策略、权限流水线、子 Agent 委派、技能加载和评估，且无需修改内核。
 
 `examples/nano_loop/` 提供外层 Loop 控制面：反复创建干净的 NanoEngine 运行、验证产物、持久化证据、执行预算策略，并在明确的人工 Gate 停止。
 
@@ -322,7 +351,7 @@ def chat(self, messages, tools=None) -> LLMResponse: ...
 ## 测试
 
 ```bash
-# 内核、公共扩展与 Profile 测试（159 个）
+# 内核、公共扩展、Profile 与 Gallery 测试（169 个）
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # Coding Agent 测试（435 个：291 UT + 144 ST）
@@ -334,7 +363,7 @@ cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**共 621 个测试。** 内核测试只需要内核依赖与 pytest；真实 MCP stdio 测试使用 `mcp` 可选依赖。
+**共 631 个测试。** 内核测试只需要内核依赖与 pytest；真实 MCP stdio 测试使用 `mcp` 可选依赖。
 
 ---
 

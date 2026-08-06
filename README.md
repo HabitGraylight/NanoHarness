@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-621%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-631%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -113,9 +113,10 @@ configs/
   scripts/               # Shell-script tools (auto-discovered, 27 tools)
 examples/
   coding_agent/          # Full-featured coding agent reference (435 tests)
+  harness_gallery/       # ClaudeCode, Codex, Hermes, and OpenClaw profiles
   harness_profiles/      # Declarative white-box composition examples
   nano_loop/             # Evidence-gated Loop Engineering example (27 tests)
-tests/                   # 159 kernel/extension/profile tests
+tests/                   # 169 kernel/extension/profile/gallery tests
 ```
 
 ---
@@ -293,6 +294,36 @@ winner.
 
 ---
 
+## Harness Gallery
+
+`examples/harness_gallery/` runs four materially different profiles through a
+shared, network-free Scenario:
+
+- **NanoClaudeCode** — interactive, session-oriented coding with memory,
+  skills, task/team delegation, and interactive write approval;
+- **NanoCodex** — controlled Plan → Execute → Review coding with task,
+  worktree, sandbox, and evidence-oriented service bindings;
+- **NanoHermes** — persistent personal agent with curated memory, procedural
+  skills, staged self-improvement, scheduling, and isolated delegation;
+- **NanoOpenClaw** — persistent gateway shape with console/webhook/mock channel
+  capabilities, memory, scheduling, and background work.
+
+```bash
+python examples/harness_gallery/main.py matrix
+python examples/harness_gallery/main.py run nano_claude_code
+python examples/harness_gallery/main.py run nano_codex
+python examples/harness_gallery/main.py run nano_hermes
+python examples/harness_gallery/main.py run nano_openclaw
+```
+
+The deterministic `ScriptedLLM` requires no API key or network. Every run saves
+a private full Report and a separate content-minimized Trace. The existing
+`examples/coding_agent/` remains the 435-test NanoClaudeCode behavior baseline;
+it will become a compatibility launcher only after M5.2 reaches parity, rather
+than being copied into a second implementation.
+
+---
+
 ## Tools
 
 Tools satisfy `BaseToolRegistry` with two methods: `get_tool_schemas()` and `call(name, args)`.
@@ -319,7 +350,7 @@ def chat(self, messages, tools=None) -> LLMResponse: ...
 
 **Custom components** — subclass any `Base*` ABC and inject into `NanoEngine`.
 
-See `examples/coding_agent/` for a reference that wires together a custom LLM adapter, memory strategy, permission pipeline, subagent delegation, skill loading, and evaluation — all built on top of the kernel without modifying it.
+See `examples/coding_agent/` for the current NanoClaudeCode implementation baseline. It wires together a custom LLM adapter, memory strategy, permission pipeline, subagent delegation, skill loading, and evaluation without modifying the kernel.
 
 See `examples/nano_loop/` for an outer-loop control plane that repeatedly creates fresh NanoEngine runs, verifies their artifacts, persists evidence, enforces budgets, and stops at explicit human gates.
 
@@ -328,7 +359,7 @@ See `examples/nano_loop/` for an outer-loop control plane that repeatedly create
 ## Testing
 
 ```bash
-# Kernel, extension, and profile tests (159)
+# Kernel, extension, profile, and Gallery tests (169)
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # Coding agent tests (435: 291 UT + 144 ST)
@@ -340,7 +371,7 @@ cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**Total: 621 tests.** Kernel tests require only the kernel dependencies and pytest; real MCP stdio tests use the `mcp` optional dependency.
+**Total: 631 tests.** Kernel tests require only the kernel dependencies and pytest; real MCP stdio tests use the `mcp` optional dependency.
 
 ---
 

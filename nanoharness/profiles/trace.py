@@ -88,6 +88,8 @@ def summarize_trace(payload: Any) -> HarnessTrace:
         return _from_events(payload)
     if not isinstance(payload, dict):
         raise ValueError("Trace input must be a report/checkpoint object or event list")
+    if "source_kind" in payload:
+        return HarnessTrace.model_validate(payload)
     if "events" in payload or "summary" in payload or "run" in payload:
         return _from_report(payload)
     if "trajectory" in payload and "status" in payload:

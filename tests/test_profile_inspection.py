@@ -160,6 +160,14 @@ def test_trace_rejects_unrecognized_payload():
         summarize_trace({"hello": "world"})
 
 
+def test_normalized_trace_json_round_trips_through_loader(tmp_path):
+    expected = summarize_trace(sample_report())
+    path = tmp_path / "trace.json"
+    path.write_text(expected.model_dump_json(), encoding="utf-8")
+
+    assert load_trace(str(path)) == expected
+
+
 def test_trace_comparison_reports_metric_and_counter_deltas():
     left = summarize_trace(sample_report(tool_calls=1, run_id="run_left"))
     right = summarize_trace(sample_report(tool_calls=3, run_id="run_right"))
