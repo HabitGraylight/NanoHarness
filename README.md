@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-631%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-636%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -106,17 +106,23 @@ nanoharness/
     tasks/               #   Persistent dependency-aware Task Board
     teams/               #   Managed long-lived teammates + inbox protocol
     worktrees/           #   Git worktree lanes bound to Task records
-  profiles/              # Profiles, trace summaries, comparisons, and matrices
+  profiles/              # Profiles, staged assembly, traces, comparisons, matrices
+  testing/               # Deterministic scenarios, scripted provider, artifacts
   utils/                 # get_logger, count_tokens
 configs/
   prompts.yaml           # Prompt templates
   scripts/               # Shell-script tools (auto-discovered, 27 tools)
+recipes/                 # Declarative Profile and Trace inspection fixtures
+  coding_team.yaml
+  solo_subagent.yaml
+  traces/
 examples/
-  coding_agent/          # Full-featured coding agent reference (435 tests)
-  harness_gallery/       # ClaudeCode, Codex, Hermes, and OpenClaw profiles
-  harness_profiles/      # Declarative white-box composition examples
+  nano_claude_code/      # Provider-backed interactive coding (435 tests)
+  nano_codex/            # Controlled coding harness
+  nano_hermes/           # Persistent learning personal agent
+  nano_openclaw/         # Minimal gateway-style harness
   nano_loop/             # Evidence-gated Loop Engineering example (27 tests)
-tests/                   # 169 kernel/extension/profile/gallery tests
+tests/                   # 171 kernel/extension/profile/example tests
 ```
 
 ---
@@ -136,7 +142,7 @@ The kernel depends only on Pydantic and PyYAML. LLM clients and other integratio
 python main.py
 
 # Run the coding agent
-cd examples/coding_agent && python main.py
+cd examples/nano_claude_code && python main.py
 
 # Run an evidence-gated loop
 cd examples/nano_loop
@@ -245,7 +251,7 @@ Extracted capabilities currently include:
 - `SubagentExtension` — one-shot read-only delegation with optional parent-context forking;
 - `WorktreeExtension` — audited Git execution lanes with `requires=["tasks.board"]` and task binding.
 
-The Coding Agent installs all nine through `ExtensionManager`. Team and Subagent declare their host/runtime dependencies explicitly, so `inspect()` shows both extension-provided and host-provided edges. Their former app-local modules remain compatibility forwarding layers rather than duplicate implementations. MCP remains optional: install `nanoharness[mcp]` only for profiles that need external servers.
+NanoClaudeCode installs all nine through `ExtensionManager`. Team and Subagent declare their host/runtime dependencies explicitly, so `inspect()` shows both extension-provided and host-provided edges. Their former app-local modules remain compatibility forwarding layers rather than duplicate implementations. MCP remains optional: install `nanoharness[mcp]` only for profiles that need external servers.
 
 ## Harness Profiles
 
@@ -258,19 +264,24 @@ dependencies into a deterministic installation order, explains providers and
 conflicts, installs extensions, and can bind the resulting tool registry plus
 host services into a `NanoEngine`.
 
+`StagedAssembler` handles applications whose host services can only be bound
+after bootstrap extensions are installed. It preserves one explicit sequence:
+bootstrap extensions → host bind → runtime extensions. The application can then
+construct its Engine from the completed service bindings.
+
 ```bash
-python -m nanoharness.profiles validate examples/harness_profiles/coding_team.yaml
-python -m nanoharness.profiles explain examples/harness_profiles/coding_team.yaml
+python -m nanoharness.profiles validate recipes/coding_team.yaml
+python -m nanoharness.profiles explain recipes/coding_team.yaml
 python -m nanoharness.profiles catalog
-python -m nanoharness.profiles matrix examples/harness_profiles/solo_subagent.yaml examples/harness_profiles/coding_team.yaml
-python -m nanoharness.profiles trace examples/harness_profiles/traces/solo.json
-python -m nanoharness.profiles compare examples/harness_profiles/traces/solo.json examples/harness_profiles/traces/team.json
+python -m nanoharness.profiles matrix recipes/solo_subagent.yaml recipes/coding_team.yaml
+python -m nanoharness.profiles trace recipes/traces/solo.json
+python -m nanoharness.profiles compare recipes/traces/solo.json recipes/traces/team.json
 ```
 
 ```python
 from nanoharness import HarnessBuilder, HarnessSpec
 
-spec = HarnessSpec.from_file("examples/harness_profiles/coding_team.yaml")
+spec = HarnessSpec.from_file("recipes/coding_team.yaml")
 builder = HarnessBuilder()
 
 validation = builder.validate(spec)  # no files, tools, or threads are created
@@ -294,10 +305,11 @@ winner.
 
 ---
 
-## Harness Gallery
+## Independently Runnable Harnesses
 
-`examples/harness_gallery/` runs four materially different profiles through a
-shared, network-free Scenario:
+Each harness owns its entry point, Profile, app policy, scenarios, tests, and
+documentation. They reuse NanoHarness packages but never import another
+example's application code:
 
 - **NanoClaudeCode** — interactive, session-oriented coding with memory,
   skills, task/team delegation, and interactive write approval;
@@ -309,18 +321,18 @@ shared, network-free Scenario:
   capabilities, memory, scheduling, and background work.
 
 ```bash
-python examples/harness_gallery/main.py matrix
-python examples/harness_gallery/main.py run nano_claude_code
-python examples/harness_gallery/main.py run nano_codex
-python examples/harness_gallery/main.py run nano_hermes
-python examples/harness_gallery/main.py run nano_openclaw
+python examples/nano_claude_code/profile_demo.py
+python examples/nano_codex/main.py
+python examples/nano_hermes/main.py
+python examples/nano_openclaw/main.py
+python examples/nano_loop/main.py --help
 ```
 
-The deterministic `ScriptedLLM` requires no API key or network. Every run saves
-a private full Report and a separate content-minimized Trace. The existing
-`examples/coding_agent/` remains the 435-test NanoClaudeCode behavior baseline;
-it will become a compatibility launcher only after M5.2 reaches parity, rather
-than being copied into a second implementation.
+The deterministic smoke entries require no API key or network and save a private
+Report plus a content-minimized Trace. NanoClaudeCode additionally keeps its real
+provider-backed REPL. Cross-example Matrix and Trace comparison use the built-in
+`python -m nanoharness.profiles matrix/compare` commands; inspection utilities
+are not placed under `examples/`.
 
 ---
 
@@ -350,7 +362,7 @@ def chat(self, messages, tools=None) -> LLMResponse: ...
 
 **Custom components** — subclass any `Base*` ABC and inject into `NanoEngine`.
 
-See `examples/coding_agent/` for the current NanoClaudeCode implementation baseline. It wires together a custom LLM adapter, memory strategy, permission pipeline, subagent delegation, skill loading, and evaluation without modifying the kernel.
+See `examples/nano_claude_code/` for the full NanoClaudeCode implementation. It wires together a custom LLM adapter, memory strategy, permission pipeline, subagent delegation, skill loading, and evaluation without modifying the kernel.
 
 See `examples/nano_loop/` for an outer-loop control plane that repeatedly creates fresh NanoEngine runs, verifies their artifacts, persists evidence, enforces budgets, and stops at explicit human gates.
 
@@ -359,19 +371,24 @@ See `examples/nano_loop/` for an outer-loop control plane that repeatedly create
 ## Testing
 
 ```bash
-# Kernel, extension, profile, and Gallery tests (169)
+# Kernel, extension, profile, and example tests (171)
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
-# Coding agent tests (435: 291 UT + 144 ST)
-cd examples/coding_agent
+# NanoClaudeCode tests (435: 291 UT + 144 ST)
+cd examples/nano_claude_code
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
+
+# Independent NanoCodex, NanoHermes, and NanoOpenClaw smoke suites (1 each)
+cd ../nano_codex && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
+cd ../nano_hermes && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
+cd ../nano_openclaw && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # NanoLoop tests (27)
 cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**Total: 631 tests.** Kernel tests require only the kernel dependencies and pytest; real MCP stdio tests use the `mcp` optional dependency.
+**Total: 636 tests.** Kernel tests require only the kernel dependencies and pytest; real MCP stdio tests use the `mcp` optional dependency.
 
 ---
 

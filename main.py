@@ -2,7 +2,7 @@
 
 This file demonstrates how to assemble the NanoEngine with only core
 components. Memory, permissions, MCP, and LLM adapters are application-layer
-concerns — see examples/coding_agent/ for a full-featured implementation.
+concerns — see examples/nano_claude_code/ for a full-featured implementation.
 """
 
 import os

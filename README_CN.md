@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-631%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-636%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -106,17 +106,23 @@ nanoharness/
     tasks/               #   持久化依赖型 Task Board
     teams/               #   托管长期队友与 Inbox 协议
     worktrees/           #   与 Task 绑定的 Git worktree lane
-  profiles/              # Profile、Trace 摘要、对比与自动矩阵
+  profiles/              # Profile、阶段式装配、Trace、对比与自动矩阵
+  testing/               # 确定性 Scenario、脚本 Provider 与 Artifact
   utils/                 # get_logger, count_tokens
 configs/
   prompts.yaml           # Prompt 模板
   scripts/               # Shell 脚本工具（自动发现，27 个）
+recipes/                 # 声明式 Profile 与 Trace 检查夹具
+  coding_team.yaml
+  solo_subagent.yaml
+  traces/
 examples/
-  coding_agent/          # 完整 Coding Agent 参考（435 个测试）
-  harness_gallery/       # ClaudeCode、Codex、Hermes、OpenClaw Profile
-  harness_profiles/      # 声明式白箱组合示例
+  nano_claude_code/      # Provider 驱动的交互式 Coding（435 个测试）
+  nano_codex/            # 受控 Coding Harness
+  nano_hermes/           # 持久学习型个人 Agent
+  nano_openclaw/         # 最小 Gateway 风格 Harness
   nano_loop/             # 证据驱动的 Loop Engineering 示例（27 个测试）
-tests/                   # 169 个内核/扩展/Profile/Gallery 测试
+tests/                   # 171 个内核/扩展/Profile/Example 测试
 ```
 
 ---
@@ -136,7 +142,7 @@ pip install -e .
 python main.py
 
 # 运行 Coding Agent
-cd examples/coding_agent && python main.py
+cd examples/nano_claude_code && python main.py
 
 # 运行证据驱动的 Loop
 cd examples/nano_loop
@@ -243,7 +249,7 @@ extensions.close()
 - `SubagentExtension` — 单次只读委派，并可选择 fork 父上下文；
 - `WorktreeExtension` — 带审计事件的 Git 执行 lane，通过 `requires=["tasks.board"]` 显式依赖 Task Board。
 
-Coding Agent 通过 `ExtensionManager` 安装九个公共扩展；Team 与 Subagent 还显式声明宿主运行时依赖，因此 `inspect()` 能同时显示扩展提供与宿主提供的依赖边。原应用层模块仅作为兼容转发层保留，不再维护重复实现。MCP 仍是可选能力，只有需要外部服务器的 Profile 才需安装 `nanoharness[mcp]`。
+NanoClaudeCode 通过 `ExtensionManager` 安装九个公共扩展；Team 与 Subagent 还显式声明宿主运行时依赖，因此 `inspect()` 能同时显示扩展提供与宿主提供的依赖边。原应用层模块仅作为兼容转发层保留，不再维护重复实现。MCP 仍是可选能力，只有需要外部服务器的 Profile 才需安装 `nanoharness[mcp]`。
 
 ## Harness Profiles
 
@@ -255,19 +261,23 @@ YAML、TOML 或 JSON 配方。声明中只记录宿主提供的 Capability 与 S
 解释 Provider、冲突与配置 Schema，安装 Extension，并将最终工具注册表和宿主
 Service 绑定为 `NanoEngine`。
 
+`StagedAssembler` 用于处理必须先安装 Bootstrap Extension、之后才能绑定宿主
+Service 的应用，并保持唯一显式顺序：Bootstrap Extension → Host Bind → Runtime
+Extension。应用随后可以使用完整的 Service 绑定构建 Engine。
+
 ```bash
-python -m nanoharness.profiles validate examples/harness_profiles/coding_team.yaml
-python -m nanoharness.profiles explain examples/harness_profiles/coding_team.yaml
+python -m nanoharness.profiles validate recipes/coding_team.yaml
+python -m nanoharness.profiles explain recipes/coding_team.yaml
 python -m nanoharness.profiles catalog
-python -m nanoharness.profiles matrix examples/harness_profiles/solo_subagent.yaml examples/harness_profiles/coding_team.yaml
-python -m nanoharness.profiles trace examples/harness_profiles/traces/solo.json
-python -m nanoharness.profiles compare examples/harness_profiles/traces/solo.json examples/harness_profiles/traces/team.json
+python -m nanoharness.profiles matrix recipes/solo_subagent.yaml recipes/coding_team.yaml
+python -m nanoharness.profiles trace recipes/traces/solo.json
+python -m nanoharness.profiles compare recipes/traces/solo.json recipes/traces/team.json
 ```
 
 ```python
 from nanoharness import HarnessBuilder, HarnessSpec
 
-spec = HarnessSpec.from_file("examples/harness_profiles/coding_team.yaml")
+spec = HarnessSpec.from_file("recipes/coding_team.yaml")
 builder = HarnessBuilder()
 
 validation = builder.validate(spec)  # 不创建文件、工具或线程
@@ -288,9 +298,10 @@ explanation = builder.explain(spec)  # Manifest、Schema、顺序与依赖边
 
 ---
 
-## Harness Gallery
+## 独立可运行 Harness
 
-`examples/harness_gallery/` 使用同一个无网络 Scenario 运行四种真实不同的 Profile：
+每个 Harness 都拥有自己的入口、Profile、应用 Policy、Scenario、测试和文档；
+它们复用 NanoHarness 公共包，但不会导入其他 Example 的应用代码：
 
 - **NanoClaudeCode** — 交互式、Session 导向的 Coding Harness，组合 Memory、
   Skills、Task/Team 委派与写入审批；
@@ -302,17 +313,18 @@ explanation = builder.explain(spec)  # Manifest、Schema、顺序与依赖边
   并组合 Memory、Scheduler 与 Background。
 
 ```bash
-python examples/harness_gallery/main.py matrix
-python examples/harness_gallery/main.py run nano_claude_code
-python examples/harness_gallery/main.py run nano_codex
-python examples/harness_gallery/main.py run nano_hermes
-python examples/harness_gallery/main.py run nano_openclaw
+python examples/nano_claude_code/profile_demo.py
+python examples/nano_codex/main.py
+python examples/nano_hermes/main.py
+python examples/nano_openclaw/main.py
+python examples/nano_loop/main.py --help
 ```
 
-确定性 `ScriptedLLM` 不需要 API Key 或网络。每次运行分别保存敏感的完整 Report
-和内容最小化 Trace。现有 `examples/coding_agent/` 继续作为拥有 435 项测试的
-NanoClaudeCode 行为基线；只有 M5.2 达到等价后才会降为兼容入口，不会复制出
-第二套同名实现。
+确定性 Smoke 入口不需要 API Key 或网络，每次运行分别保存敏感的完整 Report
+和内容最小化 Trace。NanoClaudeCode 还保留真实 Provider 驱动的 REPL。
+跨 Example 的 Matrix 与 Trace 比较直接使用内置的
+`python -m nanoharness.profiles matrix/compare` 命令；检查工具不再放入
+`examples/`。
 
 ---
 
@@ -342,7 +354,7 @@ def chat(self, messages, tools=None) -> LLMResponse: ...
 
 **自定义组件** — 继承任意 `Base*` ABC，注入 `NanoEngine`。
 
-`examples/coding_agent/` 是当前 NanoClaudeCode 实现基线，其中组装了自定义 LLM 适配器、记忆策略、权限流水线、子 Agent 委派、技能加载和评估，且无需修改内核。
+`examples/nano_claude_code/` 是完整 NanoClaudeCode 实现，其中组装了自定义 LLM 适配器、记忆策略、权限流水线、子 Agent 委派、技能加载和评估，且无需修改内核。
 
 `examples/nano_loop/` 提供外层 Loop 控制面：反复创建干净的 NanoEngine 运行、验证产物、持久化证据、执行预算策略，并在明确的人工 Gate 停止。
 
@@ -351,19 +363,24 @@ def chat(self, messages, tools=None) -> LLMResponse: ...
 ## 测试
 
 ```bash
-# 内核、公共扩展、Profile 与 Gallery 测试（169 个）
+# 内核、公共扩展、Profile 与 Example 测试（171 个）
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
-# Coding Agent 测试（435 个：291 UT + 144 ST）
-cd examples/coding_agent
+# NanoClaudeCode 测试（435 个：291 UT + 144 ST）
+cd examples/nano_claude_code
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
+
+# NanoCodex、NanoHermes、NanoOpenClaw 独立 Smoke 测试（各 1 个）
+cd ../nano_codex && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
+cd ../nano_hermes && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
+cd ../nano_openclaw && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # NanoLoop 测试（27 个）
 cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**共 631 个测试。** 内核测试只需要内核依赖与 pytest；真实 MCP stdio 测试使用 `mcp` 可选依赖。
+**共 636 个测试。** 内核测试只需要内核依赖与 pytest；真实 MCP stdio 测试使用 `mcp` 可选依赖。
 
 ---
 

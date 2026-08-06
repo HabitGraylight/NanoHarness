@@ -141,6 +141,8 @@ from nanoharness.extensions.worktrees import (
 
 from nanoharness.profiles import (
     HARNESS_SPEC_VERSION,
+    AssemblyPlan,
+    AssemblyPlanError,
     DependencyEdge,
     EngineSpec,
     ExtensionCatalog,
@@ -157,6 +159,8 @@ from nanoharness.profiles import (
     HostRequirements,
     MatrixRow,
     PlannedExtension,
+    StagedAssembler,
+    StagedAssembly,
     HarnessTrace,
     TraceComparison,
     TraceMetricComparison,

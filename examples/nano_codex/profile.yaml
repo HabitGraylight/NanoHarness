@@ -1,0 +1,70 @@
+schema_version: "1.0"
+name: nano-codex
+description: >-
+  Controlled plan-execute-review coding harness with task and worktree lanes.
+
+host:
+  capabilities:
+    - runtime.agent_llm
+    - runtime.context
+    - runtime.plan_review
+    - tools.workspace
+    - surface.task
+    - sandbox.workspace_write
+  services:
+    - llm.codex
+    - context.run
+    - state.run
+    - hooks.review
+    - evaluator.evidence
+    - policy.controlled
+    - approval.host
+    - executor.sandbox
+    - events.artifacts
+
+engine:
+  llm_service: llm.codex
+  context_service: context.run
+  state_service: state.run
+  hooks_service: hooks.review
+  evaluator_service: evaluator.evidence
+  policy_service: policy.controlled
+  approval_broker_service: approval.host
+  executor_service: executor.sandbox
+  event_sink_service: events.artifacts
+  max_steps: 10
+
+extensions:
+  - name: worktrees.git
+    config:
+      workspace_root: "${workspace}"
+      worktree_dir: "${workspace}/.nano_codex/worktrees"
+      index_path: "${workspace}/.nano_codex/worktrees.json"
+      branch_prefix: codex/
+  - name: subagents.delegate
+    config:
+      llm_service_name: llm.codex
+      context_service_name: context.run
+      max_turns: 6
+      tool_whitelist: [workspace_read]
+  - name: tasks.board
+    config:
+      persist_path: "${runtime}/tasks.json"
+  - name: skills.directory
+    config:
+      directory: "${skills}"
+  - name: background.shell
+    config:
+      workspace_root: "${workspace}"
+      scratch_dir: "${workspace}/.nano_codex/scratch"
+      max_concurrent: 2
+  - name: memory.file
+    enabled: false
+
+metadata:
+  family: coding
+  style: codex
+  surface: controlled-task
+  policy_mode: controlled
+  execution_phases: [plan, execute, review]
+  context_lifetime: run

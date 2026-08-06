@@ -1,0 +1,18 @@
+schema_version: "1.0"
+name: inspect-workspace
+description: Deterministic NanoHermes smoke scenario.
+query: Read project/brief.txt and summarize the requirement.
+fixture_files:
+  project/brief.txt: >-
+    Durable learning must be inspectable and staged for review.
+responses:
+  - content: I will inspect the durable-learning requirement.
+    tool_calls:
+      - call_id: example_read_1
+        name: workspace_read
+        arguments: {path: project/brief.txt}
+  - content: NanoHermes stages persistent learning for explicit review.
+expect:
+  success: true
+  min_steps: 2
+  required_tools: [workspace_read]

@@ -1,0 +1,18 @@
+schema_version: "1.0"
+name: inspect-workspace
+description: Deterministic NanoClaudeCode smoke scenario.
+query: Read project/brief.txt and summarize the requirement.
+fixture_files:
+  project/brief.txt: >-
+    A complete example owns its host, entry point, profile, tests, and docs.
+responses:
+  - content: I will inspect the workspace before answering.
+    tool_calls:
+      - call_id: example_read_1
+        name: workspace_read
+        arguments: {path: project/brief.txt}
+  - content: The example must own its complete runnable host boundary.
+expect:
+  success: true
+  min_steps: 2
+  required_tools: [workspace_read]

@@ -1,3 +1,9 @@
+from nanoharness.profiles.assembly import (
+    AssemblyPlan,
+    AssemblyPlanError,
+    StagedAssembler,
+    StagedAssembly,
+)
 from nanoharness.profiles.builder import (
     HarnessBuild,
     HarnessBuilder,
@@ -41,6 +47,8 @@ from nanoharness.profiles.trace import (
 
 __all__ = [
     "HARNESS_SPEC_VERSION",
+    "AssemblyPlan",
+    "AssemblyPlanError",
     "DependencyEdge",
     "DuplicateCatalogEntryError",
     "ExtensionCatalog",
@@ -63,6 +71,8 @@ __all__ = [
     "TraceComparison",
     "TraceMetricComparison",
     "TraceStep",
+    "StagedAssembler",
+    "StagedAssembly",
     "build_profile_matrix",
     "compare_traces",
     "explain_harness",

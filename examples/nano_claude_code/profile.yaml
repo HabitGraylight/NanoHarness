@@ -1,0 +1,96 @@
+schema_version: "1.0"
+name: nano-claude-code
+description: >-
+  Interactive local coding harness derived from the existing Coding Agent.
+
+host:
+  capabilities:
+    - runtime.llm
+    - runtime.agent_llm
+    - runtime.context
+    - tools.workspace
+    - surface.repl
+    - steering.interactive
+  services:
+    - llm.claude
+    - context.managed
+    - state.session
+    - hooks.interactive
+    - evaluator.coding
+    - policy.interactive
+    - approval.terminal
+    - executor.workspace
+    - events.artifacts
+
+engine:
+  llm_service: llm.claude
+  context_service: context.managed
+  state_service: state.session
+  hooks_service: hooks.interactive
+  evaluator_service: evaluator.coding
+  policy_service: policy.interactive
+  approval_broker_service: approval.terminal
+  executor_service: executor.workspace
+  event_sink_service: events.artifacts
+  max_steps: 12
+
+# Conceptual order is intentional; HarnessBuilder resolves dependency order.
+extensions:
+  - name: teams.runtime
+    config:
+      workspace_root: "${workspace}"
+      team_dir: "${workspace}/.nano_claude_code/team"
+      llm_service_name: llm.claude
+      check_interval: 0.05
+      idle_check_interval: 0.05
+  - name: subagents.delegate
+    config:
+      llm_service_name: llm.claude
+      context_service_name: context.managed
+      max_turns: 8
+      tool_whitelist: [workspace_read]
+  - name: worktrees.git
+    config:
+      workspace_root: "${workspace}"
+      worktree_dir: "${workspace}/.nano_claude_code/worktrees"
+      index_path: "${workspace}/.nano_claude_code/worktrees.json"
+  - name: tasks.board
+    config:
+      persist_path: "${runtime}/tasks.json"
+  - name: memory.file
+    config:
+      directory: "${runtime}/memory"
+  - name: skills.directory
+    config:
+      directory: "${skills}"
+  - name: background.shell
+    config:
+      workspace_root: "${workspace}"
+      scratch_dir: "${workspace}/.nano_claude_code/scratch"
+  - name: scheduler.local
+    config:
+      persist_path: "${runtime}/schedules.json"
+      start_checker: false
+  - name: mcp.stdio
+    enabled: false
+    config:
+      servers: []
+
+metadata:
+  family: coding
+  style: claude-code
+  surface: interactive-repl
+  policy_mode: interactive
+  context_lifetime: session
+  implementation: examples/nano_claude_code
+  assembly:
+    bootstrap_extensions:
+      - memory.file
+      - skills.directory
+      - background.shell
+      - scheduler.local
+      - tasks.board
+      - worktrees.git
+      - teams.runtime
+    runtime_extensions:
+      - subagents.delegate
