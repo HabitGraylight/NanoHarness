@@ -1,0 +1,20 @@
+schema_version: "1.0"
+name: nano-solo-subagent
+description: Minimal one-shot delegation profile for comparison with a coding team.
+
+host:
+  capabilities:
+    - runtime.agent_llm
+    - runtime.context
+  services:
+    - llm.agent
+    - context.agent
+
+extensions:
+  - name: subagents.delegate
+    config:
+      max_turns: 8
+
+metadata:
+  style: focused-delegation
+  white_box: true

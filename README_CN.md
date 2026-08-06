@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-611%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-621%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -106,7 +106,7 @@ nanoharness/
     tasks/               #   持久化依赖型 Task Board
     teams/               #   托管长期队友与 Inbox 协议
     worktrees/           #   与 Task 绑定的 Git worktree lane
-  profiles/              # HarnessSpec、Catalog、Builder 与 validate/explain CLI
+  profiles/              # Profile、Trace 摘要、对比与自动矩阵
   utils/                 # get_logger, count_tokens
 configs/
   prompts.yaml           # Prompt 模板
@@ -115,7 +115,7 @@ examples/
   coding_agent/          # 完整 Coding Agent 参考（435 个测试）
   harness_profiles/      # 声明式白箱组合示例
   nano_loop/             # 证据驱动的 Loop Engineering 示例（27 个测试）
-tests/                   # 149 个内核/扩展/Profile 测试
+tests/                   # 159 个内核/扩展/Profile 测试
 ```
 
 ---
@@ -258,6 +258,9 @@ Service 绑定为 `NanoEngine`。
 python -m nanoharness.profiles validate examples/harness_profiles/coding_team.yaml
 python -m nanoharness.profiles explain examples/harness_profiles/coding_team.yaml
 python -m nanoharness.profiles catalog
+python -m nanoharness.profiles matrix examples/harness_profiles/solo_subagent.yaml examples/harness_profiles/coding_team.yaml
+python -m nanoharness.profiles trace examples/harness_profiles/traces/solo.json
+python -m nanoharness.profiles compare examples/harness_profiles/traces/solo.json examples/harness_profiles/traces/team.json
 ```
 
 ```python
@@ -276,6 +279,11 @@ explanation = builder.explain(spec)  # Manifest、Schema、顺序与依赖边
 
 `explain` 会脱敏常见密钥字段及完整 `env` 映射。离线校验把声明的宿主需求
 视为假设；`build()` 会在安装任何 Extension 前检查真实 Capability 与 Service。
+
+`matrix` 会把一个或多个 Profile 转换为 ETCSLV、策略、能力、扩展与宿主 Service
+矩阵。`trace` 将 NanoEngine Report、Checkpoint 或 JSONL Event Stream 归一化为
+最小内容指标，并省略原始 Thought、工具参数、Observation、输出和评估解释。
+`compare` 可以比较两个 Profile 或两个 Trace，只报告事实差异，不判定胜负。
 
 ---
 
@@ -314,7 +322,7 @@ def chat(self, messages, tools=None) -> LLMResponse: ...
 ## 测试
 
 ```bash
-# 内核、公共扩展与 Profile 测试（149 个）
+# 内核、公共扩展与 Profile 测试（159 个）
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # Coding Agent 测试（435 个：291 UT + 144 ST）
@@ -326,7 +334,7 @@ cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**共 611 个测试。** 内核测试只需要内核依赖与 pytest；真实 MCP stdio 测试使用 `mcp` 可选依赖。
+**共 621 个测试。** 内核测试只需要内核依赖与 pytest；真实 MCP stdio 测试使用 `mcp` 可选依赖。
 
 ---
 
@@ -337,7 +345,7 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 - 跨进程队友传输层
 - 上下文压缩策略
 - 可观测性集成（OpenTelemetry / LangFuse）
-- 框架完备度矩阵 — 自动化 ETCSLV 覆盖度报告
+- Profile Schema 迁移与兼容工具
 
 ---
 

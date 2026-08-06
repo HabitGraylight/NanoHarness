@@ -1,0 +1,81 @@
+{
+  "run": {
+    "run_id": "run_team_demo",
+    "session_id": "session_profile_demo",
+    "protocol_version": "2.1",
+    "status": "completed"
+  },
+  "summary": {
+    "success": true,
+    "evaluation": {
+      "achieved": true,
+      "confidence": 0.93
+    }
+  },
+  "trajectory": [
+    {
+      "step_id": 0,
+      "thought": "Split the work into inspect and verify tasks.",
+      "actions": [
+        {"name": "task_create", "status": "success"},
+        {"name": "team_spawn", "status": "success"}
+      ],
+      "observation": "A teammate accepted the verification task.",
+      "status": "completed"
+    },
+    {
+      "step_id": 1,
+      "thought": "Apply the primary change while verification runs.",
+      "actions": [
+        {"name": "file_edit", "status": "success"}
+      ],
+      "observation": "The primary change completed.",
+      "status": "completed"
+    },
+    {
+      "step_id": 2,
+      "thought": "Collect verification and close the task.",
+      "actions": [
+        {"name": "task_update", "status": "success"}
+      ],
+      "observation": "Verification passed and the task is complete.",
+      "status": "terminated"
+    }
+  ],
+  "events": [
+    {
+      "run_id": "run_team_demo",
+      "session_id": "session_profile_demo",
+      "sequence": 0,
+      "type": "run_started",
+      "timestamp": "2026-08-06T00:00:00+00:00",
+      "data": {}
+    },
+    {
+      "run_id": "run_team_demo",
+      "session_id": "session_profile_demo",
+      "sequence": 1,
+      "type": "policy_evaluated",
+      "timestamp": "2026-08-06T00:00:01+00:00",
+      "step_id": 0,
+      "data": {"decision": {"outcome": "allow"}}
+    },
+    {
+      "run_id": "run_team_demo",
+      "session_id": "session_profile_demo",
+      "sequence": 2,
+      "type": "policy_evaluated",
+      "timestamp": "2026-08-06T00:00:03+00:00",
+      "step_id": 1,
+      "data": {"decision": {"outcome": "allow"}}
+    },
+    {
+      "run_id": "run_team_demo",
+      "session_id": "session_profile_demo",
+      "sequence": 3,
+      "type": "run_completed",
+      "timestamp": "2026-08-06T00:00:06+00:00",
+      "data": {"status": "completed", "success": true}
+    }
+  ]
+}

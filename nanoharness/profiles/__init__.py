@@ -12,6 +12,11 @@ from nanoharness.profiles.catalog import (
     UnknownExtensionError,
 )
 from nanoharness.profiles.io import load_harness_spec
+from nanoharness.profiles.matrix import (
+    HarnessMatrix,
+    MatrixRow,
+    build_profile_matrix,
+)
 from nanoharness.profiles.models import (
     HARNESS_SPEC_VERSION,
     DependencyEdge,
@@ -23,6 +28,15 @@ from nanoharness.profiles.models import (
     HarnessValidation,
     HostRequirements,
     PlannedExtension,
+)
+from nanoharness.profiles.trace import (
+    HarnessTrace,
+    TraceComparison,
+    TraceMetricComparison,
+    TraceStep,
+    compare_traces,
+    load_trace,
+    summarize_trace,
 )
 
 __all__ = [
@@ -37,13 +51,23 @@ __all__ = [
     "HarnessBuilder",
     "HarnessExplanation",
     "HarnessIssue",
+    "HarnessMatrix",
     "HarnessSpec",
     "HarnessSpecError",
     "HarnessValidation",
     "HostRequirements",
+    "MatrixRow",
     "PlannedExtension",
     "UnknownExtensionError",
+    "HarnessTrace",
+    "TraceComparison",
+    "TraceMetricComparison",
+    "TraceStep",
+    "build_profile_matrix",
+    "compare_traces",
     "explain_harness",
     "load_harness_spec",
+    "load_trace",
+    "summarize_trace",
     "validate_harness",
 ]

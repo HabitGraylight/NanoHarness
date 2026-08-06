@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-611%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-621%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -106,7 +106,7 @@ nanoharness/
     tasks/               #   Persistent dependency-aware Task Board
     teams/               #   Managed long-lived teammates + inbox protocol
     worktrees/           #   Git worktree lanes bound to Task records
-  profiles/              # HarnessSpec, catalog, builder, validate/explain CLI
+  profiles/              # Profiles, trace summaries, comparisons, and matrices
   utils/                 # get_logger, count_tokens
 configs/
   prompts.yaml           # Prompt templates
@@ -115,7 +115,7 @@ examples/
   coding_agent/          # Full-featured coding agent reference (435 tests)
   harness_profiles/      # Declarative white-box composition examples
   nano_loop/             # Evidence-gated Loop Engineering example (27 tests)
-tests/                   # 149 kernel/extension/profile tests
+tests/                   # 159 kernel/extension/profile tests
 ```
 
 ---
@@ -261,6 +261,9 @@ host services into a `NanoEngine`.
 python -m nanoharness.profiles validate examples/harness_profiles/coding_team.yaml
 python -m nanoharness.profiles explain examples/harness_profiles/coding_team.yaml
 python -m nanoharness.profiles catalog
+python -m nanoharness.profiles matrix examples/harness_profiles/solo_subagent.yaml examples/harness_profiles/coding_team.yaml
+python -m nanoharness.profiles trace examples/harness_profiles/traces/solo.json
+python -m nanoharness.profiles compare examples/harness_profiles/traces/solo.json examples/harness_profiles/traces/team.json
 ```
 
 ```python
@@ -280,6 +283,13 @@ explanation = builder.explain(spec)  # manifests, schemas, order, dependency edg
 `explain` redacts common secret fields and complete `env` mappings. Offline
 validation treats declared host requirements as assumptions; `build()` checks
 the real capability and service bindings before installing anything.
+
+`matrix` turns one or more profiles into ETCSLV, policy, capability, extension,
+and host-service rows. `trace` normalizes NanoEngine reports, checkpoints, and
+JSONL event streams into content-minimized metrics. It omits raw thoughts, tool
+arguments, observations, outputs, and evaluator explanations. `compare` accepts
+two profiles or two traces and reports factual differences without assigning a
+winner.
 
 ---
 
@@ -318,7 +328,7 @@ See `examples/nano_loop/` for an outer-loop control plane that repeatedly create
 ## Testing
 
 ```bash
-# Kernel, extension, and profile tests (149)
+# Kernel, extension, and profile tests (159)
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # Coding agent tests (435: 291 UT + 144 ST)
@@ -330,7 +340,7 @@ cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**Total: 611 tests.** Kernel tests require only the kernel dependencies and pytest; real MCP stdio tests use the `mcp` optional dependency.
+**Total: 621 tests.** Kernel tests require only the kernel dependencies and pytest; real MCP stdio tests use the `mcp` optional dependency.
 
 ---
 
@@ -341,7 +351,7 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 - Cross-process teammate transports
 - Context compaction strategies
 - Observability integration (OpenTelemetry / LangFuse)
-- Harness Completeness Matrix — automated ETCSLV coverage reporting
+- Profile schema migrations and compatibility tooling
 
 ---
 
