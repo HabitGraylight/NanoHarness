@@ -5,6 +5,7 @@ import pytest
 from pydantic import BaseModel, ConfigDict
 
 from nanoharness.components.tools.dict_registry import DictToolRegistry
+from nanoharness.core.schema import LLMResponse
 from nanoharness.extensions import (
     BaseExtension,
     DuplicateExtensionError,
@@ -22,7 +23,9 @@ from nanoharness.extensions.memory import MemoryExtension
 from nanoharness.extensions.skills import SkillRegistry, SkillsExtension
 from nanoharness.extensions.background import BackgroundExtension
 from nanoharness.extensions.scheduler import SchedulerExtension
+from nanoharness.extensions.subagents import SubagentExtension
 from nanoharness.extensions.tasks import TaskExtension
+from nanoharness.extensions.teams import TeamExtension, TeammateManager
 from nanoharness.extensions.worktrees import WorktreeExtension
 
 
@@ -745,3 +748,134 @@ def test_worktree_extension_preflights_tools_before_filesystem_changes(tmp_path)
         )
 
     assert not (tmp_path / ".worktrees").exists()
+
+
+class ImmediateLLM:
+    def chat(self, messages, tools=None):
+        return LLMResponse(content="delegated result")
+
+
+class ParentContext:
+    def get_full_context(self):
+        return [{"role": "system", "content": "parent context"}]
+
+
+def test_subagent_extension_requires_host_runtime_capabilities():
+    manager = make_manager()
+
+    with pytest.raises(
+        ExtensionDependencyError,
+        match="runtime.agent_llm.*runtime.context",
+    ):
+        manager.install(SubagentExtension())
+
+    assert "task" not in manager.context.tool_names()
+
+
+def test_subagent_extension_resolves_host_services_and_delegates():
+    manager = make_manager(["runtime.agent_llm", "runtime.context"])
+    manager.context.provide_service("llm.agent", ImmediateLLM())
+    manager.context.provide_service("context.agent", ParentContext())
+
+    installation = manager.install(SubagentExtension())
+    result = manager.context.tools.call(
+        "task",
+        {"description": "inspect the project", "fork": True},
+    )
+    inventory = manager.inspect()
+
+    assert result == "delegated result"
+    assert installation.services == ["subagents"]
+    assert installation.metadata["lifecycle"] == "one-shot"
+    assert inventory["dependencies"] == [
+        {
+            "extension": "subagents.delegate",
+            "capability": "runtime.agent_llm",
+            "providers": ["context"],
+        },
+        {
+            "extension": "subagents.delegate",
+            "capability": "runtime.context",
+            "providers": ["context"],
+        },
+    ]
+
+
+def test_team_extension_requires_llm_and_task_board(tmp_path):
+    manager = make_manager(["runtime.llm"])
+    manager.context.metadata["workspace_root"] = str(tmp_path)
+    manager.context.provide_service("llm.raw", ImmediateLLM())
+
+    with pytest.raises(ExtensionDependencyError, match="tasks.board"):
+        manager.install(TeamExtension())
+
+    assert "team" not in manager.context.services
+
+
+def test_team_extension_installs_dependency_graph_and_closes_threads(tmp_path):
+    manager = make_manager(["runtime.llm"])
+    manager.context.metadata["workspace_root"] = str(tmp_path)
+    manager.context.provide_service("llm.raw", ImmediateLLM())
+    manager.install(TaskExtension())
+    installation = manager.install(
+        TeamExtension(),
+        {
+            "check_interval": 0.01,
+            "idle_check_interval": 0.01,
+            "idle_max_checks": 1,
+            "shutdown_timeout": 1,
+        },
+    )
+    team = manager.context.services["team"]
+
+    spawned = manager.context.tools.call(
+        "team_spawn",
+        {"name": "reviewer", "role": "reviewer"},
+    )
+    inventory = manager.inspect()
+
+    assert "Spawned teammate 'reviewer'" in spawned
+    assert team.active_thread_names == ["reviewer"]
+    assert installation.metadata["lifecycle"] == "long-lived"
+    assert {
+        (edge["capability"], tuple(edge["providers"]))
+        for edge in inventory["dependencies"]
+        if edge["extension"] == "teams.runtime"
+    } == {
+        ("runtime.llm", ("context",)),
+        ("tasks.board", ("tasks.board",)),
+    }
+
+    manager.close()
+
+    assert team.closed
+    assert team.active_thread_names == []
+    assert team.list()[0]["status"] == "shutdown"
+
+
+def test_team_runtime_confines_storage_and_teammate_names(tmp_path):
+    registry = DictToolRegistry()
+
+    with pytest.raises(ValueError, match="within workspace_root"):
+        TeammateManager(
+            llm_client=ImmediateLLM(),
+            registry=registry,
+            workspace_root=str(tmp_path / "workspace"),
+            team_dir=str(tmp_path / "outside"),
+        )
+
+    manager = make_manager(["runtime.llm"])
+    manager.context.metadata["workspace_root"] = str(tmp_path / "workspace")
+    manager.context.provide_service("llm.raw", ImmediateLLM())
+    manager.install(TaskExtension())
+    manager.install(TeamExtension())
+
+    with pytest.raises(RuntimeError, match="safe characters"):
+        manager.context.tools.call(
+            "team_spawn",
+            {"name": "../escape", "role": "reviewer"},
+        )
+    with pytest.raises(ValueError, match="Invalid request ID"):
+        manager.context.services["team"]._tracker.get("../../escape")
+
+    manager.close()

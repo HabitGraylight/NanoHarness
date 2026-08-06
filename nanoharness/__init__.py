@@ -104,6 +104,16 @@ from nanoharness.extensions.skills import (
     SkillsExtension,
     SkillsExtensionConfig,
 )
+from nanoharness.extensions.subagents import (
+    SubagentContext,
+    SubagentExtension,
+    SubagentExtensionConfig,
+    SubagentRunner,
+    build_subagent_context,
+    register_subagent_tool,
+    register_task_tool,
+    run_subagent,
+)
 from nanoharness.extensions.tasks import (
     TaskBoard,
     TaskExtension,
@@ -112,6 +122,13 @@ from nanoharness.extensions.tasks import (
     is_claimable,
     is_ready,
     make_task,
+)
+from nanoharness.extensions.teams import (
+    RequestTracker,
+    TeamExtension,
+    TeamExtensionConfig,
+    TeammateManager,
+    register_team_tools,
 )
 from nanoharness.extensions.worktrees import (
     TaskBoardBindingProtocol,

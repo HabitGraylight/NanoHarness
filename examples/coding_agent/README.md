@@ -92,9 +92,9 @@ coding_agent/
 │   ├── resilient_llm.py   #   LLM wrapper: continuation, context compression, retry
 │   ├── scheduler.py       #   Compatibility facade → nanoharness.extensions.scheduler
 │   ├── skills.py          #   Markdown skill discovery and loading
-│   ├── subagent.py        #   Subagent delegation with read-only tool subset
+│   ├── subagent.py        #   Compatibility facade → nanoharness.extensions.subagents
 │   ├── task_system.py     #   Compatibility facade → nanoharness.extensions.tasks
-│   ├── team.py            #   Long-lived teammate system (daemon threads)
+│   ├── team.py            #   Compatibility facade → nanoharness.extensions.teams
 │   ├── tools.py           #   Top-level tool assembly
 │   ├── ui.py              #   REPL loop + readline + history
 │   └── worktree.py        #   Compatibility facade → nanoharness.extensions.worktrees
@@ -130,17 +130,17 @@ NanoEngine
          └── evaluate_success()  — LLM-based independent goal verification
 ```
 
-Key subsystems (all app-layer, no kernel changes):
+Key subsystems (public extensions plus app-level profile wiring, no kernel changes):
 
 | Subsystem | Module | Purpose |
 |---|---|---|
 | **Memory** | `memory.py` | File-based `.memory/` directory, YAML frontmatter, keyword search |
 | **Tasks** | `nanoharness.extensions.tasks` | Persistent dependencies, status transitions, claims, and role-aware ownership |
 | **Worktrees** | `nanoharness.extensions.worktrees` | Audited Git lanes with an explicit `tasks.board` capability dependency |
-| **Team** | `team.py` | Spawn teammates with independent Think-Act-Observe loops |
+| **Team** | `nanoharness.extensions.teams` | Long-lived teammate loops, inbox/request protocol, notifications, and managed shutdown |
 | **Scheduler** | `nanoharness.extensions.scheduler` | Persistent cron/delay prompts and managed checker lifecycle |
 | **Background** | `nanoharness.extensions.background` | Bounded shell processes, completion notices, and shutdown cancellation |
-| **Subagent** | `subagent.py` | Delegate focused subtasks with read-only tool subset |
+| **Subagent** | `nanoharness.extensions.subagents` | One-shot focused delegation with a read-only tool subset and optional context fork |
 | **MCP** | `nanoharness.extensions.mcp` | Official SDK stdio sessions, dynamic tools, and managed process cleanup (`app/mcp.py` keeps the old imports) |
 | **Skills** | `skills.py` | Markdown skill files with YAML frontmatter |
 | **Context** | `context.py` | Three-layer: spill large results → compress old → summarize when long |
@@ -162,12 +162,12 @@ Key subsystems (all app-layer, no kernel changes):
 | **Worktree** | `worktree_create`, `worktree_enter`, `worktree_run`, `worktree_closeout`, `worktree_list` |
 | **Background** | `background_run`, `background_poll` |
 | **Scheduler** | `schedule_create`, `schedule_pause`, `schedule_resume`, `schedule_delete`, `schedule_list` |
-| **Team** | `team_spawn`, `team_send`, `team_list`, `team_shutdown` |
+| **Team** | `team_spawn`, `team_send`, `team_list`, `team_shutdown`, `team_request_shutdown`, `team_submit_plan`, `team_review`, `team_requests` |
 | **Subagent** | `task` (delegates subtask with read-only tools) |
 | **Skills** | `skill` (discover and load markdown skills) |
 | **MCP** | `mcp__{server}__{tool}` (dynamically registered from external servers) |
 
-Memory, Skills, MCP, Background, and Scheduler are installed through one `ExtensionManager`. Background, Scheduler, and teammates feed `ManagedContext` through the same notification-source contract. The resolved capability inventory is available at `engine.extension_manager.inspect()`, and the CLI closes resource-owning extensions on exit.
+Memory, Skills, MCP, Background, Scheduler, Tasks, Worktrees, Team, and Subagent are installed through one `ExtensionManager`. Background, Scheduler, and Team feed `ManagedContext` through the same notification-source contract. Team depends on `runtime.llm` and `tasks.board`; Subagent depends on `runtime.agent_llm` and `runtime.context`. The resolved graph is available at `engine.extension_manager.inspect()`, and the CLI closes resource-owning extensions on exit.
 
 ## Permission Model
 

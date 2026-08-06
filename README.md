@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-592%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-597%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -102,7 +102,9 @@ nanoharness/
     mcp/                 #   MCP stdio clients + dynamic MCP tools
     scheduler/           #   Persistent cron/delay scheduling service
     skills/              #   SkillRegistry + SkillsExtension
+    subagents/           #   One-shot isolated delegation runtime
     tasks/               #   Persistent dependency-aware Task Board
+    teams/               #   Managed long-lived teammates + inbox protocol
     worktrees/           #   Git worktree lanes bound to Task records
   utils/                 # get_logger, count_tokens
 configs/
@@ -111,7 +113,7 @@ configs/
 examples/
   coding_agent/          # Full-featured coding agent reference (435 tests)
   nano_loop/             # Evidence-gated Loop Engineering example (27 tests)
-tests/                   # 130 kernel tests
+tests/                   # 135 kernel/extension tests
 ```
 
 ---
@@ -236,9 +238,11 @@ Extracted capabilities currently include:
 - `BackgroundExtension` — bounded shell execution, workspace-confined working directories, completion notifications, and shutdown cancellation;
 - `SchedulerExtension` — persistent cron/delay prompts with a managed checker thread and fired notifications;
 - `TaskExtension` — persistent dependency-aware tasks, claims, roles, and schema-first task tools;
+- `TeamExtension` — long-lived teammate loops, persisted inbox/request protocol, Task Board auto-claiming, notifications, and joined shutdown;
+- `SubagentExtension` — one-shot read-only delegation with optional parent-context forking;
 - `WorktreeExtension` — audited Git execution lanes with `requires=["tasks.board"]` and task binding.
 
-The Coding Agent installs all seven through `ExtensionManager`. Its former app-local extension modules remain compatibility forwarding layers rather than duplicate implementations. MCP remains optional: install `nanoharness[mcp]` only for profiles that need external servers.
+The Coding Agent installs all nine through `ExtensionManager`. Team and Subagent declare their host/runtime dependencies explicitly, so `inspect()` shows both extension-provided and host-provided edges. Their former app-local modules remain compatibility forwarding layers rather than duplicate implementations. MCP remains optional: install `nanoharness[mcp]` only for profiles that need external servers.
 
 ---
 
@@ -277,7 +281,7 @@ See `examples/nano_loop/` for an outer-loop control plane that repeatedly create
 ## Testing
 
 ```bash
-# Kernel tests (130)
+# Kernel and public extension tests (135)
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # Coding agent tests (435: 291 UT + 144 ST)
@@ -289,7 +293,7 @@ cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**Total: 592 tests.** Kernel tests require only the kernel dependencies and pytest; real MCP stdio tests use the `mcp` optional dependency.
+**Total: 597 tests.** Kernel tests require only the kernel dependencies and pytest; real MCP stdio tests use the `mcp` optional dependency.
 
 ---
 
@@ -297,7 +301,7 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 - Streaming LLM output
 - Async engine mode
-- Multi-agent orchestration
+- Cross-process teammate transports
 - Context compaction strategies
 - Observability integration (OpenTelemetry / LangFuse)
 - Harness Completeness Matrix — automated ETCSLV coverage reporting

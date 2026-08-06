@@ -56,7 +56,9 @@ class TestBuilderReturnsEngine:
             "memory.file",
             "scheduler.local",
             "skills.directory",
+            "subagents.delegate",
             "tasks.board",
+            "teams.runtime",
             "worktrees.git",
         }
         assert "background.executor" in inventory["capabilities"]
@@ -64,8 +66,18 @@ class TestBuilderReturnsEngine:
         assert "mcp.clients" in inventory["capabilities"]
         assert "scheduler.service" in inventory["capabilities"]
         assert "skills.registry" in inventory["capabilities"]
+        assert "subagents.delegate" in inventory["capabilities"]
         assert "tasks.board" in inventory["capabilities"]
+        assert "team.manager" in inventory["capabilities"]
         assert "worktrees.registry" in inventory["capabilities"]
+        dependency_pairs = {
+            (edge["extension"], edge["capability"])
+            for edge in inventory["dependencies"]
+        }
+        assert ("teams.runtime", "runtime.llm") in dependency_pairs
+        assert ("teams.runtime", "tasks.board") in dependency_pairs
+        assert ("subagents.delegate", "runtime.agent_llm") in dependency_pairs
+        assert ("subagents.delegate", "runtime.context") in dependency_pairs
         engine.extension_manager.close()
 
     def test_builder_has_tools(self, monkeypatch, tmp_path):

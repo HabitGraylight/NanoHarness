@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-592%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-597%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -102,7 +102,9 @@ nanoharness/
     mcp/                 #   MCP stdio 客户端与动态 MCP 工具
     scheduler/           #   持久化 cron/延时调度服务
     skills/              #   SkillRegistry + SkillsExtension
+    subagents/           #   单次隔离委派运行时
     tasks/               #   持久化依赖型 Task Board
+    teams/               #   托管长期队友与 Inbox 协议
     worktrees/           #   与 Task 绑定的 Git worktree lane
   utils/                 # get_logger, count_tokens
 configs/
@@ -111,7 +113,7 @@ configs/
 examples/
   coding_agent/          # 完整 Coding Agent 参考（435 个测试）
   nano_loop/             # 证据驱动的 Loop Engineering 示例（27 个测试）
-tests/                   # 130 个内核测试
+tests/                   # 135 个内核/公共扩展测试
 ```
 
 ---
@@ -234,9 +236,11 @@ extensions.close()
 - `BackgroundExtension` — 有并发上限的 Shell 执行、工作目录边界、完成通知和关闭取消；
 - `SchedulerExtension` — 持久化 cron/延时 Prompt、托管检查线程和触发通知；
 - `TaskExtension` — 持久化依赖任务、claim、角色和 schema-first Task 工具；
+- `TeamExtension` — 长期队友循环、持久化 Inbox/Request 协议、Task Board 自动 claim、通知和可等待关闭；
+- `SubagentExtension` — 单次只读委派，并可选择 fork 父上下文；
 - `WorktreeExtension` — 带审计事件的 Git 执行 lane，通过 `requires=["tasks.board"]` 显式依赖 Task Board。
 
-Coding Agent 通过 `ExtensionManager` 安装七个公共扩展；原应用层扩展模块仅作为兼容转发层保留，不再维护重复实现。MCP 仍是可选能力，只有需要外部服务器的 Profile 才需安装 `nanoharness[mcp]`。
+Coding Agent 通过 `ExtensionManager` 安装九个公共扩展；Team 与 Subagent 还显式声明宿主运行时依赖，因此 `inspect()` 能同时显示扩展提供与宿主提供的依赖边。原应用层模块仅作为兼容转发层保留，不再维护重复实现。MCP 仍是可选能力，只有需要外部服务器的 Profile 才需安装 `nanoharness[mcp]`。
 
 ---
 
@@ -275,7 +279,7 @@ def chat(self, messages, tools=None) -> LLMResponse: ...
 ## 测试
 
 ```bash
-# 内核测试（130 个）
+# 内核与公共扩展测试（135 个）
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # Coding Agent 测试（435 个：291 UT + 144 ST）
@@ -287,7 +291,7 @@ cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**共 592 个测试。** 内核测试只需要内核依赖与 pytest；真实 MCP stdio 测试使用 `mcp` 可选依赖。
+**共 597 个测试。** 内核测试只需要内核依赖与 pytest；真实 MCP stdio 测试使用 `mcp` 可选依赖。
 
 ---
 
@@ -295,7 +299,7 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 - 流式 LLM 输出
 - 异步引擎模式
-- 多 Agent 编排
+- 跨进程队友传输层
 - 上下文压缩策略
 - 可观测性集成（OpenTelemetry / LangFuse）
 - 框架完备度矩阵 — 自动化 ETCSLV 覆盖度报告

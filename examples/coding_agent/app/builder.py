@@ -22,14 +22,14 @@ from nanoharness.extensions.memory import MemoryExtension
 from nanoharness.extensions.mcp import MCPExtension
 from nanoharness.extensions.scheduler import SchedulerExtension
 from nanoharness.extensions.skills import SkillsExtension
+from nanoharness.extensions.subagents import SubagentExtension
+from nanoharness.extensions.teams import TeamExtension
 
 from app.context import ManagedContext
 from app.hooks import build_hooks, build_tool_hooks
 from app.permissions import TerminalApprovalBroker, build_permissions
 from app.prompt_builder import SystemPromptBuilder
-from app.subagent import register_task_tool
 from nanoharness.extensions.tasks import TaskBoard, TaskExtension
-from app.team import TeammateManager, register_team_tools
 from app.tools import build_tools
 from nanoharness.extensions.worktrees import WorktreeExtension
 
@@ -74,6 +74,8 @@ def build_coding_engine(
     memory_dir = os.path.join(workspace_root, ".memory")
     extension_context = ExtensionContext(
         tools=tools,
+        services={"llm.raw": raw_llm},
+        capabilities={"runtime.llm"},
         metadata={"workspace_root": workspace_root},
     )
     extension_manager = ExtensionManager(extension_context)
@@ -126,6 +128,10 @@ def build_coding_engine(
     bg_executor = extension_context.services["background"]
     scheduler = extension_context.services["scheduler"]
 
+    # --- Team (long-lived delegation + notification source) ---
+    extension_manager.install(TeamExtension())
+    teammate_manager = extension_context.services["team"]
+
     # --- System prompt (five segments) ---
     prompt_builder = SystemPromptBuilder(
         prompts=prompts,
@@ -136,21 +142,12 @@ def build_coding_engine(
     system_prompt = prompt_builder.build()
 
     # --- Context (three-layer managed: spill → compress → summarize) ---
-    teammate_manager = TeammateManager(
-        llm_client=raw_llm,
-        registry=tools,
-        workspace_root=workspace_root,
-        task_board=task_board,
-    )
     context = ManagedContext(
         inner=SimpleContextManager(system_prompt=system_prompt),
         scratch_dir=scratch_dir,
         llm_client=raw_llm,
         notification_sources=[bg_executor, scheduler, teammate_manager],
     )
-
-    # --- Team tools ---
-    register_team_tools(registry=tools, tm=teammate_manager)
 
     # --- Wrap LLM with error recovery ---
     def compress_context():
@@ -160,8 +157,11 @@ def build_coding_engine(
 
     llm = ResilientLLM(raw_llm, context_compressor=compress_context)
 
-    # --- Subagent (needs llm + context for fork support) ---
-    register_task_tool(registry=tools, llm_client=llm, parent_context=context)
+    # --- Subagent (one-shot delegation; host bindings are explicit) ---
+    extension_context.provide_service("llm.agent", llm)
+    extension_context.provide_service("context.agent", context)
+    extension_context.capabilities.update({"runtime.agent_llm", "runtime.context"})
+    extension_manager.install(SubagentExtension())
 
     # --- Hooks ---
     hooks = build_hooks()
