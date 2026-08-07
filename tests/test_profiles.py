@@ -58,6 +58,7 @@ def test_builtin_catalog_exposes_all_public_extensions():
 
     assert catalog.names() == [
         "background.shell",
+        "channels.durable",
         "mcp.stdio",
         "memory.file",
         "scheduler.local",

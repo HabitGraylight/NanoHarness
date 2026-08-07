@@ -64,6 +64,7 @@ class ExtensionCatalog:
     @classmethod
     def builtins(cls) -> "ExtensionCatalog":
         from nanoharness.extensions.background import BackgroundExtension
+        from nanoharness.extensions.channels import ChannelExtension
         from nanoharness.extensions.memory import MemoryExtension
         from nanoharness.extensions.mcp import MCPExtension
         from nanoharness.extensions.scheduler import SchedulerExtension
@@ -79,6 +80,7 @@ class ExtensionCatalog:
             SkillsExtension,
             MCPExtension,
             BackgroundExtension,
+            ChannelExtension,
             SchedulerExtension,
             TaskExtension,
             WorktreeExtension,

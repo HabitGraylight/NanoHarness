@@ -30,6 +30,7 @@ class BackgroundTask:
     finished_at: Optional[float] = None
     log_path: Optional[str] = None
     cancel_requested: bool = False
+    finalized: bool = False
 
 
 class BackgroundExecutor:
@@ -117,7 +118,7 @@ class BackgroundExecutor:
     def notification(self, task_id: int) -> Optional[Dict[str, Any]]:
         with self._lock:
             task = self._tasks.get(task_id)
-            if task is None:
+            if task is None or not task.finalized:
                 return None
             return _task_notification(
                 task,
@@ -142,7 +143,7 @@ class BackgroundExecutor:
             return [
                 _task_summary(task)
                 for task in self._tasks.values()
-                if task.status == "running"
+                if not task.finalized
             ]
 
     def close(self) -> None:
@@ -239,12 +240,14 @@ class BackgroundExecutor:
         finally:
             if process is not None and task.exit_code is None:
                 task.exit_code = process.returncode
-            task.finished_at = time.time()
+            finished_at = time.time()
             self._write_log(task)
             with self._lock:
+                task.finished_at = finished_at
+                self._notifications.put(task.id)
+                task.finalized = True
                 self._processes.pop(task.id, None)
                 self._threads.pop(task.id, None)
-            self._notifications.put(task.id)
 
     def _write_log(self, task: BackgroundTask) -> None:
         if not self._scratch_dir:
@@ -291,10 +294,10 @@ def _task_summary(task: BackgroundTask) -> Dict[str, Any]:
     return {
         "id": task.id,
         "command": task.command,
-        "status": task.status,
-        "exit_code": task.exit_code,
+        "status": task.status if task.finalized else "running",
+        "exit_code": task.exit_code if task.finalized else None,
         "started_at": task.started_at,
-        "finished_at": task.finished_at,
+        "finished_at": task.finished_at if task.finalized else None,
     }
 
 

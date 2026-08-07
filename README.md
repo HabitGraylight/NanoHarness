@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-825%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-900%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -99,6 +99,7 @@ nanoharness/
     base.py              #   Manifest, config, install, close, and receipt contracts
     manager.py           #   Dependency/conflict validation + inventory/lifecycle
     background/          #   Managed shell processes + completion notifications
+    channels/            #   Durable transport-neutral inbox/outbox + adapters
     memory/              #   FileMemoryManager + MemoryExtension
     mcp/                 #   MCP stdio clients + dynamic MCP tools
     scheduler/           #   Persistent cron/delay scheduling service
@@ -123,7 +124,7 @@ examples/
   nano_hermes/           # Persistent learning personal agent (86 tests)
   nano_openclaw/         # Minimal gateway-style harness
   nano_loop/             # Evidence-gated Loop Engineering example (27 tests)
-tests/                   # 464 kernel/extension/profile/example tests
+tests/                   # 539 kernel/extension/profile/example tests
 ```
 
 ---
@@ -246,6 +247,7 @@ Reusable capability packages include:
 - `SkillsExtension` — directory discovery, metadata index, and on-demand instruction loading;
 - `MCPExtension` — official MCP SDK stdio sessions, dynamic tool discovery, redacted config receipts, and managed subprocess cleanup;
 - `BackgroundExtension` — bounded shell execution, workspace-confined working directories, completion notifications, and shutdown cancellation;
+- `ChannelExtension` — transport-neutral durable ingress/outbox state, message deduplication, claim recovery, explicit delivery approval/retry, adapter idempotency keys, and a deterministic Mock adapter; its queue-only send tool is registered explicitly by a Host with a Run scope;
 - `SchedulerExtension` — persistent cron/delay prompts with a managed checker thread and fired notifications;
 - `TaskExtension` — persistent dependency-aware tasks, claims, roles, and schema-first task tools;
 - `TeamExtension` — long-lived teammate loops, persisted inbox/request protocol, Task Board auto-claiming, notifications, and joined shutdown;
@@ -375,7 +377,7 @@ See `examples/nano_loop/` for an outer-loop control plane that repeatedly create
 ## Testing
 
 ```bash
-# Kernel, public extension, profile, and example-contract tests (464)
+# Kernel, public extension, profile, and example-contract tests (539)
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # NanoClaudeCode application tests (151: 109 UT + 42 ST)
@@ -396,7 +398,7 @@ cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**Total: 825 tests.** Reusable Extension behavior is tested under the root
+**Total: 900 tests.** Reusable Extension behavior is tested under the root
 suite; each example suite focuses on application-owned composition and policy.
 Kernel tests require only the kernel dependencies and pytest; real MCP stdio
 tests use the `mcp` optional dependency.

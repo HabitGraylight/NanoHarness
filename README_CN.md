@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-825%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-900%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -99,6 +99,7 @@ nanoharness/
     base.py              #   Manifest、配置、安装、关闭与回执协议
     manager.py           #   依赖/冲突校验、安装清单与生命周期
     background/          #   托管 Shell 进程与完成通知
+    channels/            #   与传输无关的持久 Inbox/Outbox 与 Adapter
     memory/              #   FileMemoryManager + MemoryExtension
     mcp/                 #   MCP stdio 客户端与动态 MCP 工具
     scheduler/           #   持久化 cron/延时调度服务
@@ -123,7 +124,7 @@ examples/
   nano_hermes/           # 持久学习型个人 Agent（86 个测试）
   nano_openclaw/         # 最小 Gateway 风格 Harness
   nano_loop/             # 证据驱动的 Loop Engineering 示例（27 个测试）
-tests/                   # 464 个内核/扩展/Profile/Example 测试
+tests/                   # 539 个内核/扩展/Profile/Example 测试
 ```
 
 ---
@@ -244,6 +245,7 @@ extensions.close()
 - `SkillsExtension` — 目录发现、元数据索引和按需加载完整指令；
 - `MCPExtension` — 基于官方 MCP SDK 的 stdio 会话、动态工具发现、配置回执脱敏和子进程托管关闭；
 - `BackgroundExtension` — 有并发上限的 Shell 执行、工作目录边界、完成通知和关闭取消；
+- `ChannelExtension` — 与传输无关的持久 Ingress/Outbox、消息去重、Claim 恢复、显式投递审批/重试、Adapter 幂等键和确定性 Mock Adapter；其只入队不发送的 Tool 由具体 Host 使用 Run 作用域显式注册；
 - `SchedulerExtension` — 持久化 cron/延时 Prompt、托管检查线程和触发通知；
 - `TaskExtension` — 持久化依赖任务、claim、角色和 schema-first Task 工具；
 - `TeamExtension` — 长期队友循环、持久化 Inbox/Request 协议、Task Board 自动 claim、通知和可等待关闭；
@@ -366,7 +368,7 @@ def chat(self, messages, tools=None) -> LLMResponse: ...
 ## 测试
 
 ```bash
-# 内核、公共扩展、Profile 与 Example 契约测试（464 个）
+# 内核、公共扩展、Profile 与 Example 契约测试（539 个）
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # NanoClaudeCode 应用层测试（151 个：109 UT + 42 ST）
@@ -387,7 +389,7 @@ cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**共 825 个测试。** 可复用 Extension 行为统一在根测试集验证，各 Example
+**共 900 个测试。** 可复用 Extension 行为统一在根测试集验证，各 Example
 测试集中验证自己拥有的组合、策略与集成边界。内核测试只需要内核依赖与 pytest；
 真实 MCP stdio 测试使用 `mcp` 可选依赖。
 
