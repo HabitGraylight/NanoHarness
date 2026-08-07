@@ -102,9 +102,27 @@ def test_every_example_owns_a_runnable_entrypoint_profile_scenario_and_docs(
     payload = json.loads(result.stdout)
     trace = load_trace(payload["artifact"]["trace_path"])
     assert payload["success"] is True
-    assert payload["total_steps"] == 2
-    assert payload["tools"] == ["workspace_read"]
-    assert trace.tool_counts == {"workspace_read": 1}
+    if example_name == "nano_codex":
+        assert payload["total_steps"] == 6
+        assert payload["tools"] == [
+            "delivery_submit",
+            "execution_finish",
+            "plan_submit",
+            "review_submit",
+            "workspace_read",
+            "workspace_search",
+            "workspace_test",
+            "workspace_write",
+        ]
+        assert trace.tool_counts == {
+            "delivery_submit": 1,
+            "review_submit": 1,
+            "workspace_read": 1,
+        }
+    else:
+        assert payload["total_steps"] == 2
+        assert payload["tools"] == ["workspace_read"]
+        assert trace.tool_counts == {"workspace_read": 1}
 
 
 def test_scenario_rejects_fixture_path_traversal():

@@ -6,8 +6,7 @@ import textwrap
 
 import pytest
 
-from app.mcp import MCPClient, PluginLoader, mcp_handler
-from app.dispatch import DispatchRegistry, tool_result
+from nanoharness.extensions.mcp import MCPClient, PluginLoader, mcp_handler
 
 
 # -- Fake MCP server script --
@@ -170,8 +169,7 @@ class TestMCPHandlerFactory:
         handler = mcp_handler(mcp_client, "read_file")
         result = handler({"path": "/tmp/hello.txt"})
 
-        assert result.ok
-        assert "Contents of /tmp/hello.txt" in result.output
+        assert "Contents of /tmp/hello.txt" in result
 
     def test_handler_failure(self, fake_server_script):
         # Create client but don't connect -- should fail
@@ -181,7 +179,5 @@ class TestMCPHandlerFactory:
             args=[fake_server_script],
         )
         handler = mcp_handler(client, "read_file")
-        result = handler({"path": "/tmp/test.txt"})
-
-        assert not result.ok
-        assert result.error  # Should have error message
+        with pytest.raises(RuntimeError, match="not connected"):
+            handler({"path": "/tmp/test.txt"})

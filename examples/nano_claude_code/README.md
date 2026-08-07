@@ -3,7 +3,9 @@
 A self-contained coding agent built on NanoHarness, with a terminal UI.
 
 This directory is a complete NanoClaudeCode example with a provider-backed REPL,
-a network-free `profile_demo.py`, and 435 tests.
+a network-free `profile_demo.py`, and 151 application-level tests. Reusable
+Memory, Skill, Scheduler, Task, Team, Worktree, Background, Subagent, and MCP
+behavior is covered by the repository-level Extension suite.
 
 ## Quick Start
 
@@ -116,8 +118,8 @@ nano_claude_code/
 ├── nanoharness/           # Symlink → ../../nanoharness (shared kernel)
 └── tests/                 # Test suite
     ├── conftest.py        #   Shared fixtures + path setup
-    ├── ut/                #   Unit tests (15 files, 291 tests)
-    └── st/                #   System/integration tests (11 files, 144 tests)
+    ├── ut/                #   Unit tests (9 files, 109 tests)
+    └── st/                #   System/integration tests (9 files, 42 tests)
 ```
 
 ## Architecture
@@ -191,15 +193,15 @@ Modes: `interactive` (default, asks user), `auto` (deny unknown), `yolo` (allow 
 
 ```bash
 # From examples/nano_claude_code/
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ut/ -v    # Unit tests (291)
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/st/ -v    # Integration tests (144)
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v       # All (435)
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ut/ -v    # Unit tests (109)
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/st/ -v    # Integration tests (42)
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v       # All (151)
 ```
 
 | Layer | Files | Tests | What's tested |
 |---|---|---|---|
-| **UT** | 15 | 291 | Pure logic: sandbox, permissions, cron matching, task CRUD, memory I/O, adapter protocol, evaluation detection |
-| **ST** | 11 | 144 | Real OS: git worktrees, subprocess MCP, threading, full engine wiring, builder assembly |
+| **UT** | 9 | 109 | App-owned provider adapters, context/dispatch, permissions, prompts, hooks, evaluation, resilience, and MCP adaptation |
+| **ST** | 9 | 42 | Full engine/builder wiring plus Claude-specific integration with public Background, Scheduler, Skill, Subagent, Team, and MCP extensions |
 
 UT = no subprocess, no threading, no `time.sleep`. ST = real OS operations, multi-component integration.
 

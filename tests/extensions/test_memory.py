@@ -1,7 +1,7 @@
 """Tests for FileMemoryManager -- file-based memory with .memory/ directory."""
 import os
 import pytest
-from app.memory import FileMemoryManager
+from nanoharness.extensions.memory import FileMemoryManager
 
 
 # -- Save --

@@ -1,0 +1,16 @@
+schema_version: "1.0"
+name: live-repository
+objective: >-
+  Inspect the repository, implement the requested coding task, run the relevant
+  trusted checks, and submit the result for delivery.
+
+commands:
+  diff-check:
+    argv: [git, diff, --check]
+    description: Reject whitespace errors in the active worktree.
+
+allowed_deliveries: [keep, commit, apply, merge]
+
+evidence:
+  - kind: command
+    command: [git, diff, --check]

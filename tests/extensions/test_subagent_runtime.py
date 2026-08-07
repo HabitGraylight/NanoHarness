@@ -6,8 +6,8 @@ import pytest
 
 from nanoharness.core.schema import LLMResponse, ToolCall
 
-from app.dispatch import DispatchRegistry, tool_result
-from app.subagent import (
+from nanoharness.components.tools import DictToolRegistry
+from nanoharness.extensions.subagents import (
     SUBAGENT_TOOL_WHITELIST,
     SubagentContext,
     build_subagent_context,
@@ -19,34 +19,34 @@ from app.subagent import (
 # ── Helpers ──
 
 
-def _make_registry(tmp_path) -> DispatchRegistry:
+def _make_registry(tmp_path) -> DictToolRegistry:
     """Build a minimal registry with a couple of read-only tools."""
-    reg = DispatchRegistry(workspace_root=str(tmp_path))
+    reg = DictToolRegistry()
 
-    def fake_file_read(path: str) -> tool_result:
-        return tool_result(ok=True, output=f"content of {path}")
+    def fake_file_read(path: str) -> str:
+        return f"content of {path}"
 
-    def fake_search_code(pattern: str, path: str = ".") -> tool_result:
-        return tool_result(ok=True, output=f"matches for {pattern}")
+    def fake_search_code(pattern: str, path: str = ".") -> str:
+        return f"matches for {pattern}"
 
     reg.register("file_read", lambda args: fake_file_read(**args),
                  schema={"type": "function", "function": {
                      "name": "file_read", "description": "Read a file",
                      "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]},
-                 }}, path_params=["path"])
+                 }})
 
     reg.register("search_code", lambda args: fake_search_code(**args),
                  schema={"type": "function", "function": {
                      "name": "search_code", "description": "Search code",
                      "parameters": {"type": "object", "properties": {"pattern": {"type": "string"}}, "required": ["pattern"]},
-                 }}, path_params=[])
+                 }})
 
     # Also register a write tool (should NOT appear in subagent whitelist)
-    reg.register("file_write", lambda args: tool_result(ok=True, output="wrote"),
+    reg.register("file_write", lambda args: "wrote",
                  schema={"type": "function", "function": {
                      "name": "file_write", "description": "Write a file",
                      "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]},
-                 }}, path_params=["path"])
+                 }})
 
     return reg
 
@@ -321,7 +321,9 @@ class TestTaskTool:
     def test_task_tool_registered(self, tmp_path):
         reg = _make_registry(tmp_path)
         register_task_tool(registry=reg, llm_client=ImmediateAnswer())
-        assert "task" in reg.dispatch_map
+        assert "task" in {
+            schema["function"]["name"] for schema in reg.get_tool_schemas()
+        }
         schemas = reg.get_tool_schemas()
         task_schema = next(s for s in schemas if s["function"]["name"] == "task")
         assert "description" in task_schema["function"]["parameters"]["properties"]
@@ -344,9 +346,3 @@ class TestTaskTool:
         register_task_tool(registry=reg, llm_client=ToolThenAnswer())
         result = reg.call("task", {"description": "Read main.py"})
         assert "hello world" in result
-
-    def test_task_tool_no_path_validation(self, tmp_path):
-        """task tool has no path params (description is not a path)."""
-        reg = _make_registry(tmp_path)
-        register_task_tool(registry=reg, llm_client=ImmediateAnswer())
-        assert reg._path_params.get("task", []) == []

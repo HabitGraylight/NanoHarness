@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.skills import SkillEntry, SkillRegistry, _parse_skill
+from nanoharness.extensions.skills import SkillEntry, SkillRegistry, _parse_skill
 
 
 # -- Parsing --

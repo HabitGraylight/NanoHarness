@@ -13,8 +13,13 @@ import tempfile
 
 import pytest
 
-from app.mcp import MCPClient, PluginLoader, mcp_handler, register_mcp_tools
-from app.dispatch import DispatchRegistry, tool_result
+from nanoharness.components.tools import DictToolRegistry
+from nanoharness.extensions.mcp import (
+    MCPClient,
+    PluginLoader,
+    mcp_handler,
+    register_mcp_tools,
+)
 
 
 # ── Fake MCP server ──
@@ -233,8 +238,7 @@ class TestMCPHandlerFactory:
         handler = mcp_handler(mcp_client, "read_file")
         result = handler({"path": "/tmp/hello.txt"})
 
-        assert result.ok
-        assert "Contents of /tmp/hello.txt" in result.output
+        assert "Contents of /tmp/hello.txt" in result
 
     def test_handler_failure(self, fake_server_script):
         # Create client but don't connect — should fail
@@ -244,10 +248,8 @@ class TestMCPHandlerFactory:
             args=[fake_server_script],
         )
         handler = mcp_handler(client, "read_file")
-        result = handler({"path": "/tmp/test.txt"})
-
-        assert not result.ok
-        assert result.error  # Should have error message
+        with pytest.raises(RuntimeError, match="not connected"):
+            handler({"path": "/tmp/test.txt"})
 
 
 # ── TestMCPRegistration ──
@@ -259,12 +261,15 @@ class TestMCPRegistration:
         self, tmp_path, fake_server_script
     ):
         config_path = _write_config(tmp_path, fake_server_script)
-        registry = DispatchRegistry(workspace_root="/tmp")
+        registry = DictToolRegistry()
 
         clients = register_mcp_tools(registry=registry, config_path=config_path)
 
         assert len(clients) == 1
-        schemas = registry.schemas
+        schemas = {
+            schema["function"]["name"]: schema
+            for schema in registry.get_tool_schemas()
+        }
         assert "mcp__testfs__read_file" in schemas
         assert "mcp__testfs__list_files" in schemas
 
@@ -276,11 +281,14 @@ class TestMCPRegistration:
         self, tmp_path, fake_server_script
     ):
         config_path = _write_config(tmp_path, fake_server_script)
-        registry = DispatchRegistry(workspace_root="/tmp")
+        registry = DictToolRegistry()
 
         clients = register_mcp_tools(registry=registry, config_path=config_path)
 
-        schema = registry.schemas["mcp__testfs__read_file"]
+        schema = next(
+            schema for schema in registry.get_tool_schemas()
+            if schema["function"]["name"] == "mcp__testfs__read_file"
+        )
         assert schema["type"] == "function"
         assert schema["function"]["name"] == "mcp__testfs__read_file"
         assert "path" in schema["function"]["parameters"]["properties"]
@@ -289,7 +297,7 @@ class TestMCPRegistration:
             c.disconnect()
 
     def test_register_mcp_tools_missing_config(self, tmp_path):
-        registry = DispatchRegistry(workspace_root="/tmp")
+        registry = DictToolRegistry()
         clients = register_mcp_tools(
             registry=registry,
             config_path=str(tmp_path / "nonexistent.json"),
@@ -310,7 +318,7 @@ class TestMCPRegistration:
         with open(config_path, "w") as f:
             json.dump(config, f)
 
-        registry = DispatchRegistry(workspace_root="/tmp")
+        registry = DictToolRegistry()
         # Should not raise — gracefully skips bad server
         clients = register_mcp_tools(registry=registry, config_path=config_path)
         assert clients == []
@@ -321,14 +329,14 @@ class TestMCPRegistration:
 
 class TestMCPIntegration:
 
-    def test_end_to_end_via_dispatch(self, tmp_path, fake_server_script):
-        """Config → PluginLoader → MCPClient → register → call via DispatchRegistry."""
+    def test_end_to_end_via_registry(self, tmp_path, fake_server_script):
+        """Config → PluginLoader → MCPClient → register → portable registry."""
         config_path = _write_config(tmp_path, fake_server_script)
-        registry = DispatchRegistry(workspace_root="/tmp")
+        registry = DictToolRegistry()
 
         clients = register_mcp_tools(registry=registry, config_path=config_path)
 
-        # Call through the dispatch registry (same path the engine uses)
+        # Call through the portable registry (same boundary the engine uses).
         result = registry.call("mcp__testfs__read_file", {"path": "/tmp/e2e.txt"})
         assert "Contents of /tmp/e2e.txt" in result
 

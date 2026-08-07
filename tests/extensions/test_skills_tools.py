@@ -1,11 +1,9 @@
 """ST tests for the skill system: tool integration and real skills loading."""
 
-import os
-
 import pytest
 
-from app.dispatch import DispatchRegistry
-from app.skills import SkillEntry, SkillRegistry, _parse_skill, register_skill_tool
+from nanoharness.components.tools import DictToolRegistry
+from nanoharness.extensions.skills import SkillRegistry, register_skill_tool
 
 
 # ── Tool integration ──
@@ -22,13 +20,16 @@ class TestSkillTool:
             "---\nname: test-writing\ndescription: Write tests\ntrigger: when testing\n---\n# Tests\nCover edges."
         )
         skill_reg = SkillRegistry(str(d))
-        tool_reg = DispatchRegistry(workspace_root=str(tmp_path))
+        tool_reg = DictToolRegistry()
         register_skill_tool(tool_reg, skill_reg)
         return tool_reg, skill_reg
 
     def test_skill_tool_registered(self, tmp_path):
         tool_reg, _ = self._make_setup(tmp_path)
-        assert "skill" in tool_reg.dispatch_map
+        names = {
+            schema["function"]["name"] for schema in tool_reg.get_tool_schemas()
+        }
+        assert "skill" in names
 
     def test_load_skill_via_tool(self, tmp_path):
         tool_reg, _ = self._make_setup(tmp_path)
@@ -49,7 +50,10 @@ class TestSkillTool:
     def test_discovery_in_tool_description(self, tmp_path):
         """Tool schema description lists available skills for discovery."""
         tool_reg, _ = self._make_setup(tmp_path)
-        schema = tool_reg.schemas["skill"]
+        schema = next(
+            schema for schema in tool_reg.get_tool_schemas()
+            if schema["function"]["name"] == "skill"
+        )
         desc = schema["function"]["description"]
         assert "code-review" in desc
         assert "test-writing" in desc
@@ -62,19 +66,3 @@ class TestSkillTool:
         for name in skill_reg.list_names():
             result = tool_reg.call("skill", {"name": name})
             assert result  # non-empty
-
-
-# ── Real skills directory ──
-
-
-class TestRealSkills:
-    def test_real_skills_load(self):
-        """Skills from the actual skills/ directory load successfully."""
-        skills_dir = os.path.join(os.path.dirname(__file__), "..", "..", "skills")
-        if not os.path.isdir(skills_dir):
-            pytest.skip("No skills/ directory")
-        reg = SkillRegistry(skills_dir)
-        assert len(reg.list_names()) >= 3
-        for name in reg.list_names():
-            body = reg.load(name)
-            assert len(body) > 50  # meaningful content

@@ -6,9 +6,12 @@ import tempfile
 
 import pytest
 
-from app.team import (
+from nanoharness.extensions.teams import (
     TeammateManager,
     RequestTracker,
+    register_team_tools,
+)
+from nanoharness.extensions.teams.manager import (
     _load_roster,
     _save_roster,
     _roster_member,
@@ -18,10 +21,9 @@ from app.team import (
     _make_envelope,
     _make_protocol_envelope,
     _make_system_message,
-    register_team_tools,
 )
-from app.dispatch import DispatchRegistry
-from app.task_system import TaskBoard, is_claimable, is_ready
+from nanoharness.components.tools import DictToolRegistry
+from nanoharness.extensions.tasks import TaskBoard, is_claimable, is_ready
 
 
 # ── Helpers ──
@@ -59,15 +61,14 @@ class FakeLLMWithTools:
 
 def _make_registry(workspace_root="/tmp"):
     """Create a registry with a dummy read-only tool."""
-    reg = DispatchRegistry(workspace_root=workspace_root)
+    reg = DictToolRegistry()
 
     def fake_file_read(path="/tmp"):
         return f"Contents of {path}"
 
-    from app.dispatch import inprocess_handler
     reg.register(
         name="file_read",
-        handler=inprocess_handler(fake_file_read),
+        handler=lambda args: fake_file_read(**args),
         schema={
             "type": "function",
             "function": {
@@ -177,45 +178,6 @@ class TestTeammateLoop:
             user_contents = [m["content"] for m in last_call["messages"] if m["role"] == "user"]
             assert "Task A" in user_contents
             assert "Task B" in user_contents
-
-
-# ── ManagedContext integration ──
-
-
-class TestManagedContextIntegration:
-    def test_drain_injects_into_context(self):
-        """Simulate what ManagedContext will do with tm.drain()."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            from app.context import ManagedContext
-            from nanoharness.components.context.simple_context import SimpleContextManager
-            from nanoharness.core.schema import AgentMessage
-
-            fake_llm = FakeLLM(response_text="Done.")
-            tm = TeammateManager(
-                llm_client=fake_llm,
-                registry=_make_registry(),
-                workspace_root=tmpdir,
-                team_dir=tmpdir,
-            )
-            context = ManagedContext(
-                inner=SimpleContextManager(system_prompt="test"),
-                scratch_dir=os.path.join(tmpdir, "scratch"),
-                teammate_manager=tm,  # Not wired yet — will fail if not added
-            )
-
-            tm.spawn("worker")
-            tm.send("worker", "Quick task")
-
-            deadline = time.time() + 15
-            while time.time() < deadline:
-                notifs = tm.drain()
-                if notifs:
-                    break
-                time.sleep(0.5)
-
-            tm.shutdown("worker")
-            # Verify drain produced something
-            assert len(notifs) >= 1
 
 
 # ── Idle phase ──

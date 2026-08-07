@@ -6,7 +6,7 @@ import tempfile
 
 import pytest
 
-from app.task_system import TaskBoard, TaskStatus, is_ready, make_task
+from nanoharness.extensions.tasks import TaskBoard, TaskStatus, is_ready, make_task
 
 
 # -- TaskRecord & is_ready --

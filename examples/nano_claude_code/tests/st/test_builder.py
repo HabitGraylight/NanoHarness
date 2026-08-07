@@ -117,7 +117,7 @@ class TestWireTaskAwareness:
     def test_wire_task_awareness_injects_summary(self, tmp_path):
         """When tasks exist, a summary is injected into context."""
         from app.builder import _wire_task_awareness
-        from app.task_system import TaskBoard
+        from nanoharness.extensions.tasks import TaskBoard
         from app.context import ManagedContext
         from nanoharness.components.context.simple_context import SimpleContextManager
         from nanoharness.components.hooks.simple_hooks import SimpleHookManager
@@ -146,7 +146,7 @@ class TestWireTaskAwareness:
     def test_wire_task_awareness_no_active_tasks(self, tmp_path):
         """When no tasks exist, no summary is injected."""
         from app.builder import _wire_task_awareness
-        from app.task_system import TaskBoard
+        from nanoharness.extensions.tasks import TaskBoard
         from app.context import ManagedContext
         from nanoharness.components.context.simple_context import SimpleContextManager
         from nanoharness.components.hooks.simple_hooks import SimpleHookManager

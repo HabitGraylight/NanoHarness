@@ -1,0 +1,71 @@
+schema_version: "1.0"
+name: controlled-worktree-demo
+objective: >-
+  Read project/brief.txt and create project/result.txt with the requested
+  NanoHarness composition statement.
+
+fixture_files:
+  project/brief.txt: >-
+    Produce a result that says: NanoHarness profiles remain composable.
+
+commands:
+  diff-check:
+    argv: [git, diff, --check]
+    description: Reject whitespace errors in the active worktree.
+
+allowed_deliveries: [commit]
+
+phases:
+  plan:
+    - content: I will turn the requirement into an inspectable plan.
+      tool_calls:
+        - call_id: codex_plan_search_1
+          name: workspace_search
+          arguments: {query: "NanoHarness profiles", path: project}
+        - call_id: codex_plan_1
+          name: plan_submit
+          arguments:
+            steps:
+              - Inspect the project brief
+              - Write the requested result
+              - Report the changed file for review
+    - content: The plan and its isolated worktree are ready.
+  execute:
+    - content: I will inspect the brief, write in the worktree, and finish execution.
+      tool_calls:
+        - call_id: codex_execute_read_1
+          name: workspace_read
+          arguments: {path: project/brief.txt}
+        - call_id: codex_execute_write_1
+          name: workspace_write
+          arguments:
+            path: project/result.txt
+            content: "NanoHarness profiles remain composable.\n"
+        - call_id: codex_execute_finish_1
+          name: workspace_test
+          arguments: {name: diff-check}
+        - call_id: codex_execute_finish_2
+          name: execution_finish
+          arguments:
+            summary: Created the requested result in the isolated worktree.
+    - content: Execution is complete and ready for independent review.
+  review:
+    - content: I will inspect the changed file and submit an advisory review.
+      tool_calls:
+        - call_id: codex_review_read_1
+          name: workspace_read
+          arguments: {path: project/result.txt}
+        - call_id: codex_review_submit_1
+          name: review_submit
+          arguments:
+            verdict: pass
+            findings: []
+        - call_id: codex_delivery_submit_1
+          name: delivery_submit
+          arguments: {mode: commit}
+    - content: The implementation matches the brief; trusted evidence can decide.
+
+evidence:
+  - kind: file_contains
+    path: project/result.txt
+    contains: NanoHarness profiles remain composable.

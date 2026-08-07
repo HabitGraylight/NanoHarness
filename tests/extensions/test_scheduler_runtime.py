@@ -8,10 +8,11 @@ import pytest
 
 from datetime import datetime
 
-from app.scheduler import Scheduler, cron_matches, _field_matches, _schedule_notification
-from app.context import ManagedContext
-from nanoharness.components.context.simple_context import SimpleContextManager
-from nanoharness.core.schema import AgentMessage
+from nanoharness.extensions.scheduler import Scheduler, cron_matches
+from nanoharness.extensions.scheduler.scheduler import (
+    _field_matches,
+    _schedule_notification,
+)
 
 
 # ── One-shot firing ──
@@ -135,36 +136,3 @@ class TestPersistence:
             assert schedules[0]["cron"] == "0 22 * * *"
             assert schedules[1]["fire_at"] is not None
             sched2.stop()
-
-
-# ── ManagedContext integration ──
-
-
-class TestManagedContextSchedulerDrain:
-    def test_scheduler_notifications_injected(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            sched = Scheduler()
-            sched.create("Quick fire", delay_seconds=1)
-            time.sleep(2)
-            sched._check_all()
-
-            context = ManagedContext(
-                inner=SimpleContextManager(system_prompt="test"),
-                scratch_dir=tmpdir,
-                scheduler=sched,
-            )
-
-            messages = context.get_full_context()
-            sched_msgs = [m for m in messages if "Scheduled" in m.get("content", "")]
-            assert len(sched_msgs) == 1
-            assert "Quick fire" in sched_msgs[0]["content"]
-            sched.stop()
-
-    def test_no_scheduler_no_error(self):
-        context = ManagedContext(
-            inner=SimpleContextManager(system_prompt="test"),
-            scratch_dir="/tmp/test_no_sched",
-        )
-        context.add_message(AgentMessage(role="user", content="hi"))
-        messages = context.get_full_context()
-        assert len(messages) >= 2

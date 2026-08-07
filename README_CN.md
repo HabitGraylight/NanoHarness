@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-636%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-738%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -117,12 +117,12 @@ recipes/                 # 声明式 Profile 与 Trace 检查夹具
   solo_subagent.yaml
   traces/
 examples/
-  nano_claude_code/      # Provider 驱动的交互式 Coding（435 个测试）
-  nano_codex/            # 受控 Coding Harness
+  nano_claude_code/      # Provider 驱动的交互式 Coding（151 个测试）
+  nano_codex/            # 受控 Coding Harness（101 个测试）
   nano_hermes/           # 持久学习型个人 Agent
   nano_openclaw/         # 最小 Gateway 风格 Harness
   nano_loop/             # 证据驱动的 Loop Engineering 示例（27 个测试）
-tests/                   # 171 个内核/扩展/Profile/Example 测试
+tests/                   # 457 个内核/扩展/Profile/Example 测试
 ```
 
 ---
@@ -305,8 +305,9 @@ explanation = builder.explain(spec)  # Manifest、Schema、顺序与依赖边
 
 - **NanoClaudeCode** — 交互式、Session 导向的 Coding Harness，组合 Memory、
   Skills、Task/Team 委派与写入审批；
-- **NanoCodex** — 受控 Plan → Execute → Review Coding Harness，组合 Task、
-  Worktree、Sandbox 与证据导向 Service；
+- **NanoCodex** — 面向托管或既有 Git 仓库的可恢复 Plan → Execute → Review
+  Coding Harness，可接真实 Provider，提供有界 Coding 工具、交互式变更/交付审批、
+  Host 可信证据以及 keep/commit/apply/merge 交付；
 - **NanoHermes** — 持久个人 Agent，组合有界记忆、程序性 Skill、暂存式自我改进、
   Scheduler 与隔离委派；
 - **NanoOpenClaw** — 常驻 Gateway 形态，声明 Console/Webhook/Mock Channel，
@@ -363,15 +364,17 @@ def chat(self, messages, tools=None) -> LLMResponse: ...
 ## 测试
 
 ```bash
-# 内核、公共扩展、Profile 与 Example 测试（171 个）
+# 内核、公共扩展、Profile 与 Example 契约测试（457 个）
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
-# NanoClaudeCode 测试（435 个：291 UT + 144 ST）
+# NanoClaudeCode 应用层测试（151 个：109 UT + 42 ST）
 cd examples/nano_claude_code
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
-# NanoCodex、NanoHermes、NanoOpenClaw 独立 Smoke 测试（各 1 个）
+# NanoCodex 协议、工具、Host 与交付测试（101 个）
 cd ../nano_codex && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
+
+# NanoHermes、NanoOpenClaw 独立 Smoke 测试（各 1 个）
 cd ../nano_hermes && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 cd ../nano_openclaw && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
@@ -380,7 +383,9 @@ cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**共 636 个测试。** 内核测试只需要内核依赖与 pytest；真实 MCP stdio 测试使用 `mcp` 可选依赖。
+**共 738 个测试。** 可复用 Extension 行为统一在根测试集验证，各 Example
+测试集中验证自己拥有的组合、策略与集成边界。内核测试只需要内核依赖与 pytest；
+真实 MCP stdio 测试使用 `mcp` 可选依赖。
 
 ---
 

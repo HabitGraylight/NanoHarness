@@ -10,9 +10,9 @@ import time
 
 import pytest
 
-from app.worktree import WorktreeRegistry, register_worktree_tools
-from app.task_system import TaskBoard, TaskStatus
-from app.dispatch import DispatchRegistry
+from nanoharness.components.tools import DictToolRegistry
+from nanoharness.extensions.tasks import TaskBoard, TaskStatus
+from nanoharness.extensions.worktrees import WorktreeRegistry, register_worktree_tools
 
 
 # ── Helpers ──
@@ -277,11 +277,13 @@ class TestTaskWorktreeBinding:
 class TestToolRegistration:
 
     def test_worktree_tools_registered(self):
-        registry = DispatchRegistry(workspace_root="/tmp")
+        registry = DictToolRegistry()
         wt = WorktreeRegistry(workspace_root="/tmp")
         register_worktree_tools(registry=registry, wt_registry=wt)
 
-        schemas = registry.schemas
+        schemas = {
+            schema["function"]["name"] for schema in registry.get_tool_schemas()
+        }
         assert "worktree_create" in schemas
         assert "worktree_enter" in schemas
         assert "worktree_run" in schemas
@@ -289,7 +291,7 @@ class TestToolRegistration:
         assert "worktree_list" in schemas
 
     def test_worktree_list_empty(self):
-        registry = DispatchRegistry(workspace_root="/tmp")
+        registry = DictToolRegistry()
         wt = WorktreeRegistry(workspace_root="/tmp")
         register_worktree_tools(registry=registry, wt_registry=wt)
 

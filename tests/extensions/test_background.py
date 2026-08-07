@@ -8,10 +8,9 @@ import tempfile
 
 import pytest
 
-from app.background import BackgroundExecutor, _MAX_PREVIEW_LINES
-from app.context import ManagedContext
-from nanoharness.components.context.simple_context import SimpleContextManager
-from nanoharness.core.schema import AgentMessage
+from nanoharness.components.tools import DictToolRegistry
+from nanoharness.extensions.background import BackgroundExecutor, register_background_tools
+from nanoharness.extensions.background.executor import _MAX_PREVIEW_LINES
 
 
 # ── Helpers ──
@@ -55,10 +54,8 @@ class TestBackgroundRun:
 
     def test_empty_command_rejected_by_tool(self):
         """The tool handler validates command, not the executor itself."""
-        from app.dispatch import DispatchRegistry
         bg = BackgroundExecutor("/tmp")
-        registry = DispatchRegistry(workspace_root="/tmp")
-        from app.background import register_background_tools
+        registry = DictToolRegistry()
         register_background_tools(registry, bg)
 
         with pytest.raises(RuntimeError, match="command is required"):
@@ -179,60 +176,3 @@ class TestBackgroundOutput:
             # Notification should be truncated
             assert f"last {_MAX_PREVIEW_LINES} lines" in msg
             assert "[Full output:" in msg
-
-
-# ── ManagedContext integration ──
-
-
-class TestManagedContextDrain:
-    def test_notifications_injected_into_context(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            bg = BackgroundExecutor(tmpdir, scratch_dir=tmpdir)
-            context = ManagedContext(
-                inner=SimpleContextManager(system_prompt="You are helpful."),
-                scratch_dir=tmpdir,
-                bg_executor=bg,
-            )
-
-            # Run a background task
-            bg.run("echo done")
-            time.sleep(1)
-
-            # get_full_context should drain and inject notification
-            messages = context.get_full_context()
-            # Find the notification message
-            notification_msgs = [m for m in messages if "Background" in m.get("content", "")]
-            assert len(notification_msgs) == 1
-            assert "done" in notification_msgs[0]["content"]
-
-    def test_no_bg_executor_no_error(self):
-        """get_full_context works fine without bg_executor."""
-        context = ManagedContext(
-            inner=SimpleContextManager(system_prompt="test"),
-            scratch_dir="/tmp/test_no_bg",
-        )
-        context.add_message(AgentMessage(role="user", content="hi"))
-        messages = context.get_full_context()
-        assert len(messages) >= 2  # system + user
-
-    def test_drain_consumed_on_second_call(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            bg = BackgroundExecutor(tmpdir, scratch_dir=tmpdir)
-            context = ManagedContext(
-                inner=SimpleContextManager(system_prompt="test"),
-                scratch_dir=tmpdir,
-                bg_executor=bg,
-            )
-
-            bg.run("echo once")
-            time.sleep(1)
-
-            msgs1 = context.get_full_context()
-            bg_msgs1 = [m for m in msgs1 if "Background" in m.get("content", "")]
-            assert len(bg_msgs1) == 1
-
-            msgs2 = context.get_full_context()
-            bg_msgs2 = [m for m in msgs2 if "Background" in m.get("content", "")]
-            # The old notification is still in context (it was added as a message)
-            # But no NEW notification should appear
-            assert len(bg_msgs2) == len(bg_msgs1)

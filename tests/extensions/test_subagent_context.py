@@ -4,8 +4,8 @@ import pytest
 
 from nanoharness.core.schema import LLMResponse, ToolCall
 
-from app.dispatch import DispatchRegistry, tool_result
-from app.subagent import (
+from nanoharness.components.tools import DictToolRegistry
+from nanoharness.extensions.subagents import (
     SUBAGENT_TOOL_WHITELIST,
     SubagentContext,
     build_subagent_context,
@@ -15,34 +15,34 @@ from app.subagent import (
 # -- Helpers --
 
 
-def _make_registry(tmp_path) -> DispatchRegistry:
+def _make_registry(tmp_path) -> DictToolRegistry:
     """Build a minimal registry with a couple of read-only tools."""
-    reg = DispatchRegistry(workspace_root=str(tmp_path))
+    reg = DictToolRegistry()
 
-    def fake_file_read(path: str) -> tool_result:
-        return tool_result(ok=True, output=f"content of {path}")
+    def fake_file_read(path: str) -> str:
+        return f"content of {path}"
 
-    def fake_search_code(pattern: str, path: str = ".") -> tool_result:
-        return tool_result(ok=True, output=f"matches for {pattern}")
+    def fake_search_code(pattern: str, path: str = ".") -> str:
+        return f"matches for {pattern}"
 
     reg.register("file_read", lambda args: fake_file_read(**args),
                  schema={"type": "function", "function": {
                      "name": "file_read", "description": "Read a file",
                      "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]},
-                 }}, path_params=["path"])
+                 }})
 
     reg.register("search_code", lambda args: fake_search_code(**args),
                  schema={"type": "function", "function": {
                      "name": "search_code", "description": "Search code",
                      "parameters": {"type": "object", "properties": {"pattern": {"type": "string"}}, "required": ["pattern"]},
-                 }}, path_params=[])
+                 }})
 
     # Also register a write tool (should NOT appear in subagent whitelist)
-    reg.register("file_write", lambda args: tool_result(ok=True, output="wrote"),
+    reg.register("file_write", lambda args: "wrote",
                  schema={"type": "function", "function": {
                      "name": "file_write", "description": "Write a file",
                      "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]},
-                 }}, path_params=["path"])
+                 }})
 
     return reg
 
@@ -79,14 +79,6 @@ class TestBuildSubagentContext:
         ctx = build_subagent_context(reg)
         result = ctx.handlers["file_read"]({"path": "test.py"})
         assert "test.py" in result
-
-    def test_sandbox_applied_in_handlers(self, tmp_path):
-        reg = _make_registry(tmp_path)
-        ctx = build_subagent_context(reg)
-        # Escaping path should return an error string (not raise)
-        result = ctx.handlers["file_read"]({"path": "../../etc/passwd"})
-        assert "Error" in result
-
 
 # -- Whitelist correctness --
 

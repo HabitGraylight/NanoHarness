@@ -8,7 +8,8 @@ import pytest
 
 from datetime import datetime
 
-from app.scheduler import Scheduler, cron_matches, _field_matches
+from nanoharness.extensions.scheduler import Scheduler, cron_matches
+from nanoharness.extensions.scheduler.scheduler import _field_matches
 
 
 # -- Cron matching --
