@@ -56,8 +56,8 @@ started.
   Skills, and read-only Subagent extensions.
 - `app/host.py` owns phase orchestration, clean source cloning, resume behavior,
   trusted completion, and idempotent Git delivery.
-- `app/provider.py` adapts an optional OpenAI-compatible SDK client while the
-  deterministic job continues to use `ScriptedLLM`.
+- `nanoharness.components.OpenAIChatProvider` supplies the optional reusable
+  OpenAI-compatible SDK adapter while the deterministic job uses `ScriptedLLM`.
 - `app/policy.py` exposes per-phase tool allowlists. Write, exact patch, and
   delivery requests are approval-gated; raw shell and channel delivery are not
   available.
@@ -87,7 +87,7 @@ cd examples/nano_codex
 pytest -q tests
 ```
 
-The 101 tests cover job/state contracts, phase policy, approval redaction,
+The 96 application tests cover job/state contracts, phase policy, approval redaction,
 provider adaptation, trusted evidence, bounded tools, interruption/resume,
 existing repositories, and all four delivery modes.
 

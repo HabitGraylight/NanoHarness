@@ -94,6 +94,25 @@ class TestDrain:
         assert sched.drain() == []
 
 
+class TestPublicCheckDue:
+    def test_check_due_returns_structured_trigger_once(self):
+        sched = Scheduler(start_checker=False)
+        sched.create("Run reflection", delay_seconds=0)
+
+        notifications = sched.check_due()
+
+        assert notifications[0]["prompt"] == "Run reflection"
+        assert notifications[0]["fire_count"] == 1
+        assert sched.check_due() == []
+        sched.stop()
+
+    def test_check_due_rejects_closed_scheduler(self):
+        sched = Scheduler(start_checker=False)
+        sched.stop()
+        with pytest.raises(RuntimeError, match="closed"):
+            sched.check_due()
+
+
 # ── Notification format ──
 
 

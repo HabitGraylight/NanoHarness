@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.provider import OpenAIChatProvider
+from nanoharness.components import OpenAIChatProvider
 
 
 class FakeCompletions:
@@ -30,12 +30,12 @@ def _client(content="done", tool_calls=None, usage=None):
     )
 
 
-def test_provider_requires_model():
+def test_openai_chat_provider_requires_model():
     with pytest.raises(ValueError, match="model is required"):
         OpenAIChatProvider(" ", client=_client())
 
 
-def test_provider_maps_text_and_omits_empty_tools():
+def test_openai_chat_provider_maps_text_and_omits_empty_tools():
     client = _client("hello")
     result = OpenAIChatProvider("test", client=client).chat([{"role": "user"}])
     assert result.content == "hello"
@@ -43,7 +43,7 @@ def test_provider_maps_text_and_omits_empty_tools():
     assert "tools" not in client.completions.calls[0]
 
 
-def test_provider_maps_tool_calls_and_usage():
+def test_openai_chat_provider_maps_tool_calls_and_usage():
     call = SimpleNamespace(
         id="call_1",
         function=SimpleNamespace(name="workspace_read", arguments='{"path":"a.py"}'),
@@ -61,7 +61,7 @@ def test_provider_maps_tool_calls_and_usage():
 
 
 @pytest.mark.parametrize("arguments", ["not-json", "[]"])
-def test_provider_rejects_invalid_tool_arguments(arguments):
+def test_openai_chat_provider_rejects_invalid_tool_arguments(arguments):
     call = SimpleNamespace(
         id="call_bad",
         function=SimpleNamespace(name="bad", arguments=arguments),

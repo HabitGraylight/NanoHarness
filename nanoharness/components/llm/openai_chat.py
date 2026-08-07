@@ -1,4 +1,4 @@
-"""Optional real-provider adapter for NanoCodex."""
+"""Optional OpenAI-compatible implementation of the public LLM protocol."""
 
 import json
 from typing import Any, Optional

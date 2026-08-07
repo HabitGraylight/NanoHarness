@@ -14,7 +14,7 @@ sys.path.insert(0, str(_HERE.parent.parent))
 from app.host import CodexHost
 from app.models import CodexJob
 from app.approvals import TerminalApprovalDecider
-from app.provider import OpenAIChatProvider
+from nanoharness.components import OpenAIChatProvider
 
 
 def run_demo(root: Path):

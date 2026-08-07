@@ -44,7 +44,7 @@ extensions:
       llm_service_name: llm.hermes
       context_service_name: context.persistent
       max_turns: 8
-      tool_whitelist: [workspace_read]
+      tool_whitelist: [workspace_read, recall_memory, skill]
   - name: memory.file
     config:
       directory: "${runtime}/memory"
@@ -56,11 +56,6 @@ extensions:
     config:
       persist_path: "${runtime}/schedules.json"
       start_checker: false
-  - name: background.shell
-    config:
-      workspace_root: "${workspace}"
-      scratch_dir: "${workspace}/.nano_hermes/scratch"
-      max_concurrent: 2
   - name: mcp.stdio
     enabled: false
     config:

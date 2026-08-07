@@ -119,6 +119,21 @@ def test_every_example_owns_a_runnable_entrypoint_profile_scenario_and_docs(
             "review_submit": 1,
             "workspace_read": 1,
         }
+    elif example_name == "nano_hermes":
+        assert payload["total_steps"] == 4
+        assert payload["tools"] == [
+            "assist_submit",
+            "memory_propose",
+            "reflection_submit",
+            "schedule_create",
+            "skill_propose",
+            "workspace_read",
+        ]
+        assert trace.tool_counts == {
+            "memory_propose": 1,
+            "reflection_submit": 1,
+            "skill_propose": 1,
+        }
     else:
         assert payload["total_steps"] == 2
         assert payload["tools"] == ["workspace_read"]
@@ -159,11 +174,19 @@ def test_policies_live_with_the_examples_and_are_materially_different():
     )
     write = ToolRequest(name="workspace_write", **identity)
     skill = ToolRequest(name="skill_propose", **identity)
+    save_memory = ToolRequest(name="save_memory", **identity)
+    schedule = ToolRequest(name="schedule_create", **identity)
     assert codex.CodexPolicy().decide(
         PolicyStage.BEFORE_TOOL, write
     ).outcome == PolicyOutcome.REQUIRE_APPROVAL
     assert hermes.HermesPolicy().decide(
         PolicyStage.BEFORE_TOOL, skill
+    ).outcome == PolicyOutcome.ALLOW
+    assert hermes.HermesPolicy().decide(
+        PolicyStage.BEFORE_TOOL, save_memory
+    ).outcome == PolicyOutcome.DENY
+    assert hermes.HermesPolicy().decide(
+        PolicyStage.BEFORE_TOOL, schedule
     ).outcome == PolicyOutcome.REQUIRE_APPROVAL
     assert openclaw.GatewayPolicy().decide(
         PolicyStage.BEFORE_TOOL, write

@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-738%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-825%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -88,6 +88,7 @@ nanoharness/
     runtime.py           #   RunControl (cooperative cancellation + steering)
     prompt.py            #   PromptManager (YAML template loader)
   components/            # Minimal ETCSLV implementations
+    llm/                 #   E: optional OpenAI-compatible provider adapter
     tools/               #   T: DictToolRegistry, ScriptToolRegistry
     context/             #   C: SimpleContextManager
     state/               #   S: JsonStateStore
@@ -118,11 +119,11 @@ recipes/                 # Declarative Profile and Trace inspection fixtures
   traces/
 examples/
   nano_claude_code/      # Provider-backed interactive coding (151 tests)
-  nano_codex/            # Controlled coding harness (101 tests)
-  nano_hermes/           # Persistent learning personal agent
+  nano_codex/            # Controlled coding harness (96 tests)
+  nano_hermes/           # Persistent learning personal agent (86 tests)
   nano_openclaw/         # Minimal gateway-style harness
   nano_loop/             # Evidence-gated Loop Engineering example (27 tests)
-tests/                   # 457 kernel/extension/profile/example tests
+tests/                   # 464 kernel/extension/profile/example tests
 ```
 
 ---
@@ -317,8 +318,9 @@ example's application code:
   existing Git repositories, with an optional real provider, bounded coding
   tools, interactive mutation/delivery approval, trusted evidence, and
   keep/commit/apply/merge delivery;
-- **NanoHermes** — persistent personal agent with curated memory, procedural
-  skills, staged self-improvement, scheduling, and isolated delegation;
+- **NanoHermes** — resumable Assist → Reflect → Host Review personal agent with
+  cross-run memory/skills, content-addressed staged learning, independent
+  action and promotion approval, due-schedule triggers, and isolated delegation;
 - **NanoOpenClaw** — persistent gateway shape with console/webhook/mock channel
   capabilities, memory, scheduling, and background work.
 
@@ -373,18 +375,20 @@ See `examples/nano_loop/` for an outer-loop control plane that repeatedly create
 ## Testing
 
 ```bash
-# Kernel, public extension, profile, and example-contract tests (457)
+# Kernel, public extension, profile, and example-contract tests (464)
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # NanoClaudeCode application tests (151: 109 UT + 42 ST)
 cd examples/nano_claude_code
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
-# NanoCodex protocol/tool/host/delivery tests (101)
+# NanoCodex protocol/tool/host/delivery tests (96)
 cd ../nano_codex && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
-# NanoHermes and NanoOpenClaw independent smoke suites (1 each)
+# NanoHermes persistent-learning suite (86)
 cd ../nano_hermes && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
+
+# NanoOpenClaw independent smoke suite (1)
 cd ../nano_openclaw && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # NanoLoop tests (27)
@@ -392,7 +396,7 @@ cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**Total: 738 tests.** Reusable Extension behavior is tested under the root
+**Total: 825 tests.** Reusable Extension behavior is tested under the root
 suite; each example suite focuses on application-owned composition and policy.
 Kernel tests require only the kernel dependencies and pytest; real MCP stdio
 tests use the `mcp` optional dependency.

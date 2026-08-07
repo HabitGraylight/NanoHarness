@@ -171,6 +171,14 @@ class Scheduler:
                     results.append(_schedule_notification(schedule))
         return results
 
+    def check_due(self) -> List[Dict[str, Any]]:
+        """Evaluate due schedules once and return newly fired notifications."""
+
+        if self._closed:
+            raise RuntimeError("Scheduler is closed")
+        self._check_all()
+        return self.drain()
+
     def stop(self, join_timeout: float = 5.0) -> None:
         if self._closed:
             return
@@ -267,6 +275,8 @@ def _schedule_notification(schedule: Dict[str, Any]) -> Dict[str, Any]:
         lines.append("(Schedule expired — will not fire again)")
     return {
         "schedule_id": schedule["id"],
+        "prompt": schedule["prompt"],
+        "fire_count": schedule["fire_count"],
         "status": schedule["status"],
         "message": "\n".join(lines),
     }

@@ -1,0 +1,57 @@
+schema_version: "1.0"
+name: durable-learning-demo
+query: >-
+  Read project/brief.txt, answer the durable-learning requirement, and schedule
+  a later inspection reminder.
+
+fixture_files:
+  project/brief.txt: >-
+    Durable learning must be inspectable, staged, and promoted only after host
+    validation and explicit review.
+
+phases:
+  assist:
+    - content: I will inspect the requirement and create the requested reminder.
+      tool_calls:
+        - call_id: hermes_assist_read_1
+          name: workspace_read
+          arguments: {path: project/brief.txt}
+        - call_id: hermes_schedule_1
+          name: schedule_create
+          arguments:
+            prompt: Re-check the durable learning catalog.
+            delay_seconds: 3600
+            max_fires: 1
+        - call_id: hermes_assist_submit_1
+          name: assist_submit
+          arguments:
+            answer: >-
+              Durable learning is staged, structurally validated, explicitly
+              reviewed, and only then promoted into active memory or skills.
+    - content: The response is submitted for an independent reflection pass.
+  reflect:
+    - content: I found one durable principle and one reusable review procedure.
+      tool_calls:
+        - call_id: hermes_memory_propose_1
+          name: memory_propose
+          arguments:
+            name: durable-learning-boundary
+            description: Host-owned boundary for durable learning.
+            type: reference
+            content: >-
+              Durable learning remains staged until the host validates its
+              structure and an explicit reviewer approves promotion.
+        - call_id: hermes_skill_propose_1
+          name: skill_propose
+          arguments:
+            name: review-durable-learning
+            description: Review a staged learning proposal before promotion.
+            trigger: When a run proposes persistent memory or a reusable procedure.
+            content: >-
+              Inspect the proposal source, content hash, active-target revision,
+              and scope. Promote only when it is durable, reusable, and approved.
+        - call_id: hermes_reflection_submit_1
+          name: reflection_submit
+          arguments:
+            summary: Staged one durable memory and one reusable review skill.
+    - content: The host can now validate and review both staged proposals.
