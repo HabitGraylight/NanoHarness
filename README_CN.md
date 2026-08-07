@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-900%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-913%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -124,7 +124,7 @@ examples/
   nano_hermes/           # 持久学习型个人 Agent（86 个测试）
   nano_openclaw/         # 最小 Gateway 风格 Harness
   nano_loop/             # 证据驱动的 Loop Engineering 示例（27 个测试）
-tests/                   # 539 个内核/扩展/Profile/Example 测试
+tests/                   # 552 个内核/扩展/Profile/Example 测试
 ```
 
 ---
@@ -368,7 +368,7 @@ def chat(self, messages, tools=None) -> LLMResponse: ...
 ## 测试
 
 ```bash
-# 内核、公共扩展、Profile 与 Example 契约测试（539 个）
+# 内核、公共扩展、Profile 与 Example 契约测试（552 个）
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # NanoClaudeCode 应用层测试（151 个：109 UT + 42 ST）
@@ -389,7 +389,7 @@ cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**共 900 个测试。** 可复用 Extension 行为统一在根测试集验证，各 Example
+**共 913 个测试。** 可复用 Extension 行为统一在根测试集验证，各 Example
 测试集中验证自己拥有的组合、策略与集成边界。内核测试只需要内核依赖与 pytest；
 真实 MCP stdio 测试使用 `mcp` 可选依赖。
 

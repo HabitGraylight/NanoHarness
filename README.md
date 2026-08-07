@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-900%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-913%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -124,7 +124,7 @@ examples/
   nano_hermes/           # Persistent learning personal agent (86 tests)
   nano_openclaw/         # Minimal gateway-style harness
   nano_loop/             # Evidence-gated Loop Engineering example (27 tests)
-tests/                   # 539 kernel/extension/profile/example tests
+tests/                   # 552 kernel/extension/profile/example tests
 ```
 
 ---
@@ -377,7 +377,7 @@ See `examples/nano_loop/` for an outer-loop control plane that repeatedly create
 ## Testing
 
 ```bash
-# Kernel, public extension, profile, and example-contract tests (539)
+# Kernel, public extension, profile, and example-contract tests (552)
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # NanoClaudeCode application tests (151: 109 UT + 42 ST)
@@ -398,7 +398,7 @@ cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**Total: 900 tests.** Reusable Extension behavior is tested under the root
+**Total: 913 tests.** Reusable Extension behavior is tested under the root
 suite; each example suite focuses on application-owned composition and policy.
 Kernel tests require only the kernel dependencies and pytest; real MCP stdio
 tests use the `mcp` optional dependency.

@@ -139,6 +139,107 @@ class TestFileToolsViaScripts:
         result = reg.call("file_read", {"path": fpath})
         assert "QUX" in result
 
+    @pytest.mark.parametrize(
+        "scripts_dir",
+        [SCRIPTS_DIR, "examples/nano_claude_code/configs/scripts"],
+    )
+    def test_file_edit_replaces_literal_not_earlier_regex_match(
+        self,
+        tmp_path,
+        scripts_dir,
+    ):
+        path = tmp_path / "literal.txt"
+        path.write_text(
+            "result = userXgetName()\nresult = user.getName()\n",
+            encoding="utf-8",
+        )
+        registry = ScriptToolRegistry(scripts_dir)
+        registry.call("file_edit", {
+            "path": str(path),
+            "old_text": "user.getName()",
+            "new_text": "account.getName()",
+        })
+        assert path.read_text(encoding="utf-8") == (
+            "result = userXgetName()\nresult = account.getName()\n"
+        )
+
+    @pytest.mark.parametrize(
+        "literal,decoy",
+        [
+            ("items[0]", "items0"),
+            ("total*count", "totacount"),
+            ("^start", "start"),
+            ("end$", "end"),
+            (r"a\+b", "aaab"),
+            ("left|right", "leftXright"),
+            ("group.(value)", "groupXvalue"),
+        ],
+    )
+    def test_file_edit_treats_regex_metacharacters_as_literals(
+        self,
+        tmp_path,
+        literal,
+        decoy,
+    ):
+        path = tmp_path / "metacharacters.txt"
+        path.write_text(f"{decoy}\n{literal}\n", encoding="utf-8")
+        registry = ScriptToolRegistry(SCRIPTS_DIR)
+        registry.call("file_edit", {
+            "path": str(path),
+            "old_text": literal,
+            "new_text": "REPLACED",
+        })
+        assert path.read_text(encoding="utf-8") == f"{decoy}\nREPLACED\n"
+
+    def test_file_edit_replacement_text_is_literal(self, tmp_path):
+        path = tmp_path / "replacement.txt"
+        path.write_text("before TARGET after", encoding="utf-8")
+        replacement = "left&right|path\\name\nsecond line"
+        registry = ScriptToolRegistry(SCRIPTS_DIR)
+        registry.call("file_edit", {
+            "path": str(path),
+            "old_text": "TARGET",
+            "new_text": replacement,
+        })
+        assert path.read_text(encoding="utf-8") == f"before {replacement} after"
+
+    def test_file_edit_replace_all_counts_literal_occurrences(self, tmp_path):
+        path = tmp_path / "replace-all.txt"
+        path.write_text("a.b aXb a.b\na.b\n", encoding="utf-8")
+        registry = ScriptToolRegistry(SCRIPTS_DIR)
+        result = registry.call("file_edit", {
+            "path": str(path),
+            "old_text": "a.b",
+            "new_text": "done",
+            "replace_all": True,
+        })
+        assert result == f"Replaced 3 occurrences in {path}"
+        assert path.read_text(encoding="utf-8") == "done aXb done\ndone\n"
+
+    def test_file_edit_supports_multiline_literal_and_preserves_crlf(self, tmp_path):
+        path = tmp_path / "multiline.txt"
+        path.write_bytes(b"before\r\nalpha.*\r\nbeta[0]\r\nafter\r\n")
+        registry = ScriptToolRegistry(SCRIPTS_DIR)
+        registry.call("file_edit", {
+            "path": str(path),
+            "old_text": "alpha.*\r\nbeta[0]",
+            "new_text": "replacement\r\nblock",
+        })
+        assert path.read_bytes() == b"before\r\nreplacement\r\nblock\r\nafter\r\n"
+
+    def test_file_edit_not_found_keeps_original_bytes(self, tmp_path):
+        path = tmp_path / "unchanged.txt"
+        original = b"keep exactly\r\n"
+        path.write_bytes(original)
+        registry = ScriptToolRegistry(SCRIPTS_DIR)
+        with pytest.raises(RuntimeError, match="old_text not found"):
+            registry.call("file_edit", {
+                "path": str(path),
+                "old_text": "missing",
+                "new_text": "replacement",
+            })
+        assert path.read_bytes() == original
+
     def test_file_list(self, tmp_path):
         reg = ScriptToolRegistry(SCRIPTS_DIR)
         (tmp_path / "a.txt").write_text("a")

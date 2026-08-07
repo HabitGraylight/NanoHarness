@@ -14,21 +14,46 @@ if [ ! -f "$path" ]; then
     exit 1
 fi
 
-# Count matches before
-matches=$(grep -c -F "$old_text" "$path" || true)
-if [ "$matches" -eq 0 ]; then
-    echo "Error: old_text not found in $path" >&2
+if command -v python3 >/dev/null 2>&1; then
+    python_command=python3
+elif command -v python >/dev/null 2>&1; then
+    python_command=python
+else
+    echo "Error: file_edit requires Python" >&2
     exit 1
 fi
 
-if [ "${replace_all}" = "true" ]; then
-    sed -i "s|$(printf '%s' "$old_text" | sed 's/[&/\]/\\&/g')|$(printf '%s' "$new_text" | sed 's/[&/\]/\\&/g')|g" "$path"
-    echo "Replaced $matches occurrence(s) in $path"
-else
-    # Replace only the first occurrence
-    escaped_old=$(printf '%s' "$old_text" | sed 's/[&/\]/\\&/g')
-    escaped_new=$(printf '%s' "$new_text" | sed 's/[&/\]/\\&/g')
-    sed -i "0,|${escaped_old}|s|${escaped_old}|${escaped_new}|" "$path" 2>/dev/null || \
-    sed -i "0,/${escaped_old}/s//${escaped_new}/" "$path"
-    echo "Replaced 1 occurrence in $path"
-fi
+# Work on bytes so matching is literal and unrelated line endings are preserved.
+# Arguments, rather than generated source code or regexes, carry user text.
+"$python_command" - "$path" "$old_text" "$new_text" "${replace_all:-false}" <<'PY'
+import os
+import sys
+from pathlib import Path
+
+
+path = Path(sys.argv[1])
+old_text = os.fsencode(sys.argv[2])
+new_text = os.fsencode(sys.argv[3])
+replace_all = sys.argv[4] == "true"
+
+data = path.read_bytes()
+matches = data.count(old_text)
+if matches == 0:
+    print(f"Error: old_text not found in {path}", file=sys.stderr)
+    raise SystemExit(1)
+
+updated = data.replace(old_text, new_text) if replace_all else data.replace(
+    old_text,
+    new_text,
+    1,
+)
+with path.open("r+b") as handle:
+    handle.write(updated)
+    handle.truncate()
+    handle.flush()
+    os.fsync(handle.fileno())
+
+replaced = matches if replace_all else 1
+suffix = "occurrence" if replaced == 1 else "occurrences"
+print(f"Replaced {replaced} {suffix} in {path}")
+PY
