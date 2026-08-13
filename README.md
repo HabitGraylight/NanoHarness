@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-913%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-973%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -122,9 +122,9 @@ examples/
   nano_claude_code/      # Provider-backed interactive coding (151 tests)
   nano_codex/            # Controlled coding harness (96 tests)
   nano_hermes/           # Persistent learning personal agent (86 tests)
-  nano_openclaw/         # Minimal gateway-style harness
+  nano_openclaw/         # Durable multi-channel conversation gateway (58 tests)
   nano_loop/             # Evidence-gated Loop Engineering example (27 tests)
-tests/                   # 552 kernel/extension/profile/example tests
+tests/                   # 555 kernel/extension/profile/example tests
 ```
 
 ---
@@ -323,8 +323,9 @@ example's application code:
 - **NanoHermes** — resumable Assist → Reflect → Host Review personal agent with
   cross-run memory/skills, content-addressed staged learning, independent
   action and promotion approval, due-schedule triggers, and isolated delegation;
-- **NanoOpenClaw** — persistent gateway shape with console/webhook/mock channel
-  capabilities, memory, scheduling, and background work.
+- **NanoOpenClaw** — durable multi-channel conversation host with stable routing,
+  resumable Turns, delivered-history context, read-only tools, and independently
+  approved outbox delivery over the public Channel Extension;
 
 ```bash
 python examples/nano_claude_code/profile_demo.py
@@ -377,7 +378,7 @@ See `examples/nano_loop/` for an outer-loop control plane that repeatedly create
 ## Testing
 
 ```bash
-# Kernel, public extension, profile, and example-contract tests (552)
+# Kernel, public extension, profile, and example-contract tests (555)
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # NanoClaudeCode application tests (151: 109 UT + 42 ST)
@@ -390,7 +391,7 @@ cd ../nano_codex && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 # NanoHermes persistent-learning suite (86)
 cd ../nano_hermes && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
-# NanoOpenClaw independent smoke suite (1)
+# NanoOpenClaw conversation/turn/recovery/delivery suite (58)
 cd ../nano_openclaw && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # NanoLoop tests (27)
@@ -398,7 +399,7 @@ cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**Total: 913 tests.** Reusable Extension behavior is tested under the root
+**Total: 973 tests.** Reusable Extension behavior is tested under the root
 suite; each example suite focuses on application-owned composition and policy.
 Kernel tests require only the kernel dependencies and pytest; real MCP stdio
 tests use the `mcp` optional dependency.

@@ -148,13 +148,48 @@ class DurableChannelStore:
                     self._emit("inbox.claims_recovered", count=recovered)
                 return None
             record = received[0]
-            record.status = InboxStatus.CLAIMED
-            record.claim_token = f"claim_{uuid4().hex}"
-            record.claim_owner = worker_id
-            record.claimed_at = current
-            record.lease_expires_at = current + timedelta(seconds=lease)
-            record.claim_count += 1
-            record.updated_at = current
+            self._claim_locked(record, worker_id, current, lease)
+            self._save()
+            if recovered:
+                self._emit("inbox.claims_recovered", count=recovered)
+            self._emit(
+                "inbox.claimed",
+                inbox_id=record.id,
+                worker_id=worker_id,
+                claim_count=record.claim_count,
+            )
+            return record.model_copy(deep=True)
+
+    def claim_inbox(
+        self,
+        inbox_id: str,
+        worker_id: str,
+        *,
+        lease_seconds: Optional[float] = None,
+        now: Optional[datetime] = None,
+    ) -> InboxRecord:
+        """Claim one known inbox record, primarily for deterministic resume."""
+
+        if not worker_id or not worker_id.strip():
+            raise ValueError("worker_id is required")
+        lease = self.claim_lease_seconds if lease_seconds is None else lease_seconds
+        if lease <= 0:
+            raise ValueError("lease_seconds must be positive")
+        current = _normalize_now(now)
+        with self._lock:
+            record = self._require_inbox(inbox_id)
+            recovered = 0
+            if (
+                record.status == InboxStatus.CLAIMED
+                and record.lease_expires_at is not None
+                and record.lease_expires_at <= current
+            ):
+                recovered = self._recover_expired_locked(current)
+            if record.status != InboxStatus.RECEIVED:
+                raise ChannelStateTransitionError(
+                    f"inbox record {record.id} is {record.status.value}, not received"
+                )
+            self._claim_locked(record, worker_id, current, lease)
             self._save()
             if recovered:
                 self._emit("inbox.claims_recovered", count=recovered)
@@ -464,6 +499,21 @@ class DurableChannelStore:
                 record.updated_at = now
                 recovered += 1
         return recovered
+
+    @staticmethod
+    def _claim_locked(
+        record: InboxRecord,
+        worker_id: str,
+        current: datetime,
+        lease_seconds: float,
+    ) -> None:
+        record.status = InboxStatus.CLAIMED
+        record.claim_token = f"claim_{uuid4().hex}"
+        record.claim_owner = worker_id
+        record.claimed_at = current
+        record.lease_expires_at = current + timedelta(seconds=lease_seconds)
+        record.claim_count += 1
+        record.updated_at = current
 
     @staticmethod
     def _ordered_inbox(records: Iterable[InboxRecord]) -> list[InboxRecord]:

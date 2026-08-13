@@ -1,1 +1,1 @@
-"""NanoOpenClaw gateway policy and mock channel."""
+"""NanoOpenClaw durable conversation gateway application."""

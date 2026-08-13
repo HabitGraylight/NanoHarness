@@ -77,6 +77,17 @@ def test_gateway_failed_ingress_can_return_to_queue(gateway):
     assert service.claim_next("host-2").id == claimed.id
 
 
+def test_gateway_can_claim_a_specific_inbox_for_resume(gateway):
+    service, _ = gateway
+    first, _ = service.ingest(inbound("message-1"))
+    second, _ = service.ingest(inbound("message-2"))
+
+    claimed = service.claim_inbox(second.id, "resume-host")
+
+    assert claimed.id == second.id
+    assert service.store.get_inbox(first.id).status == InboxStatus.RECEIVED
+
+
 def test_gateway_delivers_only_after_explicit_approval(gateway):
     service, adapter = gateway
     queued, _ = service.queue_outbound(

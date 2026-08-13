@@ -81,6 +81,15 @@ class DurableChannelGateway:
         self._require_open()
         return self.store.claim_next(worker_id, **kwargs)
 
+    def claim_inbox(
+        self,
+        inbox_id: str,
+        worker_id: str,
+        **kwargs: Any,
+    ) -> InboxRecord:
+        self._require_open()
+        return self.store.claim_inbox(inbox_id, worker_id, **kwargs)
+
     def complete_inbox(
         self,
         inbox_id: str,

@@ -100,9 +100,24 @@ def test_every_example_owns_a_runnable_entrypoint_profile_scenario_and_docs(
     )
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
-    trace = load_trace(payload["artifact"]["trace_path"])
     assert payload["success"] is True
-    if example_name == "nano_codex":
+    if example_name == "nano_openclaw":
+        traces = [
+            load_trace(turn["artifact"]["trace_path"])
+            for turn in payload["turns"]
+        ]
+        assert payload["processed"] == 2
+        assert payload["delivered"] == 2
+        assert [turn["tools"] for turn in payload["turns"]] == [
+            ["response_submit", "workspace_read"],
+            ["response_submit"],
+        ]
+        assert [trace.tool_counts for trace in traces] == [
+            {"response_submit": 1, "workspace_read": 1},
+            {"response_submit": 1},
+        ]
+    elif example_name == "nano_codex":
+        trace = load_trace(payload["artifact"]["trace_path"])
         assert payload["total_steps"] == 6
         assert payload["tools"] == [
             "delivery_submit",
@@ -120,6 +135,7 @@ def test_every_example_owns_a_runnable_entrypoint_profile_scenario_and_docs(
             "workspace_read": 1,
         }
     elif example_name == "nano_hermes":
+        trace = load_trace(payload["artifact"]["trace_path"])
         assert payload["total_steps"] == 4
         assert payload["tools"] == [
             "assist_submit",
@@ -135,6 +151,7 @@ def test_every_example_owns_a_runnable_entrypoint_profile_scenario_and_docs(
             "skill_propose": 1,
         }
     else:
+        trace = load_trace(payload["artifact"]["trace_path"])
         assert payload["total_steps"] == 2
         assert payload["tools"] == ["workspace_read"]
         assert trace.tool_counts == {"workspace_read": 1}

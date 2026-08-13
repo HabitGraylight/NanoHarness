@@ -1,60 +1,53 @@
 schema_version: "1.0"
 name: nano-openclaw
 description: >-
-  Minimal persistent gateway harness for console, webhook, and mock channels.
+  Durable multi-channel conversation host with application-owned routing,
+  turn recovery, outbound approval, and delivery policy.
 
 host:
   capabilities:
     - runtime.context
-    - tools.workspace
+    - tools.workspace-read
     - surface.gateway
-    - routing.sessions
-    - channels.console
-    - channels.webhook
-    - channels.mock
+    - routing.conversations
+    - turns.resumable
+    - policy.outbound-approval
   services:
     - llm.gateway
-    - context.session
-    - state.gateway
+    - context.conversation
+    - state.turn
     - hooks.gateway
-    - evaluator.delivery
+    - evaluator.turn
     - policy.gateway
-    - approval.gateway
     - executor.gateway
-    - events.artifacts
+    - events.turn
 
 engine:
   llm_service: llm.gateway
-  context_service: context.session
-  state_service: state.gateway
+  context_service: context.conversation
+  state_service: state.turn
   hooks_service: hooks.gateway
-  evaluator_service: evaluator.delivery
+  evaluator_service: evaluator.turn
   policy_service: policy.gateway
-  approval_broker_service: approval.gateway
   executor_service: executor.gateway
-  event_sink_service: events.artifacts
+  event_sink_service: events.turn
   max_steps: 8
 
 extensions:
-  - name: scheduler.local
+  - name: channels.durable
     config:
-      persist_path: "${runtime}/schedules.json"
-      start_checker: false
-  - name: background.shell
-    config:
-      workspace_root: "${workspace}"
-      scratch_dir: "${workspace}/.nano_openclaw/scratch"
-      max_concurrent: 2
-  - name: memory.file
-    config:
-      directory: "${runtime}/memory"
-  - name: skills.directory
-    enabled: false
+      persist_path: "${runtime}/channels/state.json"
+      events_path: "${runtime}/channels/events.jsonl"
+      service_name: channels
+      mock_channels: [mock, console, webhook]
+      claim_lease_seconds: 3600
+      recover: true
 
 metadata:
   family: gateway
   style: openclaw
-  surface: multi-channel-gateway
+  surface: multi-channel-conversation-gateway
   policy_mode: gateway
-  context_lifetime: persistent-session
+  context_lifetime: persistent-conversation
   channels: [console, webhook, mock]
+  boundary: normalized-envelope-no-http-server

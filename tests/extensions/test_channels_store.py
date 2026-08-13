@@ -107,6 +107,35 @@ def test_claim_next_is_exclusive_under_concurrency(store):
     assert len(claimed) == 1
 
 
+def test_claim_inbox_targets_a_known_record_for_resume(store):
+    first, _ = store.ingest(inbound("first"))
+    second, _ = store.ingest(inbound("second"))
+
+    claimed = store.claim_inbox(second.id, "resume-worker")
+
+    assert claimed.id == second.id
+    assert claimed.claim_owner == "resume-worker"
+    assert store.get_inbox(first.id).status == InboxStatus.RECEIVED
+    with pytest.raises(ChannelStateTransitionError, match="not received"):
+        store.claim_inbox(second.id, "other-worker")
+
+
+def test_claim_inbox_recovers_an_expired_target_lease(store):
+    start = datetime(2026, 8, 7, 12, 0, tzinfo=timezone.utc)
+    record, _ = store.ingest(inbound())
+    first = store.claim_inbox(record.id, "first", lease_seconds=1, now=start)
+
+    resumed = store.claim_inbox(
+        record.id,
+        "resume",
+        now=start + timedelta(seconds=2),
+    )
+
+    assert resumed.claim_owner == "resume"
+    assert resumed.claim_count == 2
+    assert resumed.claim_token != first.claim_token
+
+
 def test_complete_inbox_requires_active_token_and_records_run(store):
     record, _ = store.ingest(inbound())
     claimed = store.claim_next("worker")

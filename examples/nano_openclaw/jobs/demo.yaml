@@ -1,0 +1,44 @@
+schema_version: "1.0"
+name: durable-conversation-demo
+description: Two messages on one route demonstrate durable conversation continuity.
+fixture_files:
+  project/brief.txt: >-
+    Gateway sessions route messages without mutating their workspace.
+messages:
+  - envelope:
+      message_id: demo-message-1
+      channel: mock
+      account_id: primary
+      conversation_id: conversation-1
+      sender_id: user-1
+      content: Read project/brief.txt and summarize the gateway requirement.
+      received_at: "2026-08-07T12:00:00Z"
+    responses:
+      - content: I will inspect the project brief.
+        tool_calls:
+          - call_id: demo_read_1
+            name: workspace_read
+            arguments: {path: project/brief.txt}
+      - content: I have a concise response ready.
+        tool_calls:
+          - call_id: demo_submit_1
+            name: response_submit
+            arguments:
+              answer: Gateway sessions route messages without mutating their workspace.
+      - content: Response submitted for host review.
+  - envelope:
+      message_id: demo-message-2
+      channel: mock
+      account_id: primary
+      conversation_id: conversation-1
+      sender_id: user-1
+      content: What did you just establish?
+      received_at: "2026-08-07T12:01:00Z"
+    responses:
+      - content: I can answer from the persisted conversation.
+        tool_calls:
+          - call_id: demo_submit_2
+            name: response_submit
+            arguments:
+              answer: We established that gateway sessions route messages without mutating their workspace.
+      - content: Follow-up response submitted for host review.
