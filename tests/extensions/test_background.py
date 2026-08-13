@@ -150,6 +150,10 @@ class TestBackgroundOutput:
             notifications = bg.drain()
             assert len(notifications) == 1
             assert "hello world" in notifications[0]["message"]
+            assert notifications[0]["exit_code"] == 0
+            assert notifications[0]["started_at"] is not None
+            assert notifications[0]["finished_at"] is not None
+            assert notifications[0]["log_path"].endswith(f"bg_{task_id}.log")
 
     def test_log_file_saved(self):
         with tempfile.TemporaryDirectory() as tmpdir:

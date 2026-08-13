@@ -112,6 +112,24 @@ class TestSchedulerCreate:
         with pytest.raises(ValueError):
             sched.create("", cron="* * * * *")
 
+    def test_metadata_is_json_validated_and_defensively_copied(self):
+        sched = Scheduler(start_checker=False)
+        metadata = {"route": {"channel": "mock"}}
+        created = sched.create("Wake", delay_seconds=0, metadata=metadata)
+        metadata["route"]["channel"] = "changed"
+        created["metadata"]["route"]["channel"] = "also-changed"
+
+        assert sched.get(1)["metadata"] == {"route": {"channel": "mock"}}
+
+    @pytest.mark.parametrize(
+        "metadata",
+        [["not-object"], {"bad": float("nan")}, {"bad": object()}],
+    )
+    def test_metadata_rejects_non_object_or_non_json_values(self, metadata):
+        sched = Scheduler(start_checker=False)
+        with pytest.raises(ValueError, match="metadata"):
+            sched.create("Wake", delay_seconds=0, metadata=metadata)
+
 
 class TestSchedulerPauseResume:
     def test_pause_and_resume(self):

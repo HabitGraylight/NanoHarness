@@ -1,6 +1,6 @@
 schema_version: "1.0"
 name: durable-conversation-demo
-description: Two messages on one route demonstrate durable conversation continuity.
+description: Channel continuity, wakeup dedupe, scheduled input, and delivery recovery.
 fixture_files:
   project/brief.txt: >-
     Gateway sessions route messages without mutating their workspace.
@@ -42,3 +42,19 @@ messages:
             arguments:
               answer: We established that gateway sessions route messages without mutating their workspace.
       - content: Follow-up response submitted for host review.
+schedules:
+  - name: scheduled-check
+    prompt: Report the durable gateway rule as a trusted scheduled wakeup.
+    channel: mock
+    account_id: primary
+    conversation_id: conversation-1
+    sender_id: user-1
+    delay_seconds: 0
+    responses:
+      - content: I received a trusted schedule event, not a user message.
+        tool_calls:
+          - call_id: demo_schedule_submit
+            name: response_submit
+            arguments:
+              answer: Scheduled check confirms that gateway sessions route messages without mutating their workspace.
+      - content: Scheduled response submitted for host review.

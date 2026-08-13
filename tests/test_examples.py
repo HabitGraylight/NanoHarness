@@ -106,14 +106,16 @@ def test_every_example_owns_a_runnable_entrypoint_profile_scenario_and_docs(
             load_trace(turn["artifact"]["trace_path"])
             for turn in payload["turns"]
         ]
-        assert payload["processed"] == 2
-        assert payload["delivered"] == 2
+        assert payload["delivered"] == 3
+        assert payload["processed"] == 3
         assert [turn["tools"] for turn in payload["turns"]] == [
             ["response_submit", "workspace_read"],
+            ["response_submit"],
             ["response_submit"],
         ]
         assert [trace.tool_counts for trace in traces] == [
             {"response_submit": 1, "workspace_read": 1},
+            {"response_submit": 1},
             {"response_submit": 1},
         ]
     elif example_name == "nano_codex":

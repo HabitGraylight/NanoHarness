@@ -1,8 +1,8 @@
 schema_version: "1.0"
 name: nano-openclaw
 description: >-
-  Durable multi-channel conversation host with application-owned routing,
-  turn recovery, outbound approval, and delivery policy.
+  Durable multi-source conversation host with application-owned wakeup trust,
+  routing, turn recovery, outbound approval, and separable delivery policy.
 
 host:
   capabilities:
@@ -11,7 +11,10 @@ host:
     - surface.gateway
     - routing.conversations
     - turns.resumable
+    - wakeups.normalized
+    - wakeups.trust-tiered
     - policy.outbound-approval
+    - delivery.separable
   services:
     - llm.gateway
     - context.conversation
@@ -42,6 +45,11 @@ extensions:
       mock_channels: [mock, console, webhook]
       claim_lease_seconds: 3600
       recover: true
+  - name: scheduler.local
+    config:
+      persist_path: "${runtime}/schedules.json"
+      service_name: scheduler
+      start_checker: false
 
 metadata:
   family: gateway
@@ -50,4 +58,6 @@ metadata:
   policy_mode: gateway
   context_lifetime: persistent-conversation
   channels: [console, webhook, mock]
+  wakeup_sources: [channel, schedule, background, manual]
+  delivery_mode: generate-then-review-then-deliver
   boundary: normalized-envelope-no-http-server

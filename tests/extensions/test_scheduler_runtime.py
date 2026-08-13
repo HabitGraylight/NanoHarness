@@ -1,6 +1,7 @@
 """ST tests for Scheduler — one-shot, recurring cron, drain, persistence, ManagedContext integration."""
 
 import os
+import json
 import time
 import tempfile
 
@@ -9,6 +10,8 @@ import pytest
 from datetime import datetime
 
 from nanoharness.extensions.scheduler import Scheduler, cron_matches
+from nanoharness.extensions.scheduler import register_schedule_tools
+from nanoharness.components import DictToolRegistry
 from nanoharness.extensions.scheduler.scheduler import (
     _field_matches,
     _schedule_notification,
@@ -93,6 +96,19 @@ class TestDrain:
         sched = Scheduler()
         assert sched.drain() == []
 
+    def test_queued_notification_is_a_fire_time_snapshot(self):
+        sched = Scheduler(start_checker=False)
+        sched.create("Snapshot", cron="* * * * *")
+
+        sched._check_all()
+        sched.delete(1)
+        notification = sched.drain()[0]
+
+        assert notification["fire_count"] == 1
+        assert notification["status"] == "active"
+        assert sched.get(1)["status"] == "deleted"
+        sched.stop()
+
 
 class TestPublicCheckDue:
     def test_check_due_returns_structured_trigger_once(self):
@@ -103,6 +119,7 @@ class TestPublicCheckDue:
 
         assert notifications[0]["prompt"] == "Run reflection"
         assert notifications[0]["fire_count"] == 1
+        assert notifications[0]["fired_at"] is not None
         assert sched.check_due() == []
         sched.stop()
 
@@ -111,6 +128,31 @@ class TestPublicCheckDue:
         sched.stop()
         with pytest.raises(RuntimeError, match="closed"):
             sched.check_due()
+
+
+class TestScheduleToolMetadata:
+    def test_create_tool_exposes_and_forwards_generic_metadata(self):
+        scheduler = Scheduler(start_checker=False)
+        registry = DictToolRegistry()
+        register_schedule_tools(registry, scheduler)
+        schema = next(
+            item
+            for item in registry.get_tool_schemas()
+            if item["function"]["name"] == "schedule_create"
+        )
+
+        registry.call("schedule_create", {
+            "prompt": "Wake host",
+            "delay_seconds": 0,
+            "metadata": {"route": {"channel": "mock"}},
+        })
+
+        assert schema["function"]["parameters"]["properties"]["metadata"] == {
+            "type": "object",
+            "description": "Transport-neutral host metadata returned on fire",
+        }
+        assert scheduler.get(1)["metadata"]["route"]["channel"] == "mock"
+        scheduler.stop()
 
 
 # ── Notification format ──
@@ -125,6 +167,20 @@ class TestNotificationFormat:
         notif = sched.drain()[0]
         assert "[Scheduled #1 Fired]" in notif["message"]
         assert "Run the test suite" in notif["message"]
+
+    def test_notification_preserves_structured_metadata(self):
+        sched = Scheduler(start_checker=False)
+        sched.create(
+            "Route this",
+            delay_seconds=0,
+            metadata={"route": {"channel": "mock"}, "attempt": 1},
+        )
+
+        notification = sched.check_due()[0]
+        notification["metadata"]["attempt"] = 2
+
+        assert sched.get(1)["metadata"]["attempt"] == 1
+        sched.stop()
 
     def test_notification_shows_cron_info(self):
         sched = Scheduler()
@@ -155,3 +211,29 @@ class TestPersistence:
             assert schedules[0]["cron"] == "0 22 * * *"
             assert schedules[1]["fire_at"] is not None
             sched2.stop()
+
+    def test_loads_legacy_schedule_without_metadata(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "schedules.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump({
+                    "next_id": 2,
+                    "schedules": {
+                        "1": {
+                            "id": 1,
+                            "prompt": "Legacy",
+                            "cron": None,
+                            "fire_at": 9999999999,
+                            "status": "active",
+                            "created_at": 1,
+                            "last_fired": None,
+                            "last_fired_minute": None,
+                            "fire_count": 0,
+                            "max_fires": 1,
+                        }
+                    },
+                }, handle)
+
+            scheduler = Scheduler(persist_path=path, start_checker=False)
+            assert scheduler.get(1)["metadata"] == {}
+            scheduler.stop()

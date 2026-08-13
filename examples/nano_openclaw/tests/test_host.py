@@ -1,7 +1,15 @@
 import json
 
 from app.host import GatewayHost
-from app.models import GatewayJob, TurnPhase, TurnStatus
+from app.models import (
+    ConversationRoute,
+    GatewayJob,
+    TurnPhase,
+    TurnStatus,
+    WakeupSource,
+    WakeupStatus,
+    WakeupTrust,
+)
 from nanoharness.core.schema import LLMResponse, ToolCall
 from nanoharness.extensions.channels import (
     InboxStatus,
@@ -56,6 +64,21 @@ def job(*messages):
     })
 
 
+def scheduled_job():
+    payload = job().model_dump(mode="json")
+    payload["schedules"] = [{
+        "name": "due-check",
+        "prompt": "Run trusted check",
+        "channel": "mock",
+        "account_id": "primary",
+        "conversation_id": "conversation-1",
+        "sender_id": "user-1",
+        "delay_seconds": 0,
+        "responses": [item.model_dump(mode="json") for item in responses("due answer")],
+    }]
+    return GatewayJob.model_validate(payload)
+
+
 class FailingProvider:
     def chat(self, messages, tools=None):
         raise RuntimeError("provider unavailable")
@@ -69,6 +92,14 @@ class CapturingProvider:
     def chat(self, messages, tools=None):
         self.messages.append(messages)
         return self.inner.chat(messages, tools)
+
+
+class FakeNotificationSource:
+    def __init__(self, notices):
+        self.notices = list(notices)
+
+    def drain(self):
+        return list(self.notices)
 
 
 def test_host_queues_approves_and_delivers_response(tmp_path):
@@ -96,6 +127,63 @@ def test_host_rejection_is_terminal_but_not_delivered(tmp_path):
     assert result.approval.approved is False
     assert outbox.status == OutboxStatus.REJECTED
     assert "content" not in result.approval.model_dump()
+
+
+def test_generate_only_completes_input_and_leaves_durable_pending_outbox(tmp_path):
+    with GatewayHost(job(), tmp_path) as host:
+        result = host.run_job(deliver=False).turns[0]
+        inbox = host.gateway.store.get_inbox(result.inbox_id)
+        wakeup = host.wakeup_store.get(result.wakeup_id)
+        outbox = host.gateway.store.get_outbox(result.outbox_id)
+
+    assert result.status == TurnStatus.WAITING
+    assert result.phase == TurnPhase.DELIVERY
+    assert result.success is True
+    assert result.approval is None
+    assert result.delivery_status == OutboxStatus.PENDING
+    assert inbox.status == InboxStatus.COMPLETED
+    assert wakeup.status == WakeupStatus.COMPLETED
+    assert outbox.status == OutboxStatus.PENDING
+
+
+def test_pending_delivery_survives_host_restart_without_provider(tmp_path):
+    with GatewayHost(job(), tmp_path) as first_host:
+        waiting = first_host.run_job(deliver=False).turns[0]
+
+    with GatewayHost(job(), tmp_path) as second_host:
+        delivered = second_host.deliver_turn(waiting.run_id)
+
+    assert delivered.status == TurnStatus.COMPLETED
+    assert delivered.delivery_status == OutboxStatus.SENT
+
+
+def test_sending_outbox_recovers_to_approved_after_process_restart(tmp_path):
+    with GatewayHost(job(), tmp_path) as first_host:
+        waiting = first_host.run_job(deliver=False).turns[0]
+        first_host.gateway.approve_outbox(waiting.outbox_id)
+        sending = first_host.gateway.store.begin_delivery(waiting.outbox_id)
+        assert sending.status == OutboxStatus.SENDING
+
+    with GatewayHost(job(), tmp_path) as second_host:
+        recovered = second_host.gateway.store.get_outbox(waiting.outbox_id)
+        delivered = second_host.deliver_pending()[0]
+
+    assert recovered.status == OutboxStatus.APPROVED
+    assert delivered.delivery_status == OutboxStatus.SENT
+
+
+def test_completed_wakeup_reconciles_pre_waiting_turn_state(tmp_path):
+    with GatewayHost(job(), tmp_path) as host:
+        waiting = host.run_job(deliver=False).turns[0]
+        store = host._turn_store(waiting.run_id)
+        state = store.load()
+        state.status = TurnStatus.RUNNING
+        store.save(state)
+
+        reconciled = host.process_wakeup(waiting.wakeup_id, deliver=False)
+
+    assert reconciled.status == TurnStatus.WAITING
+    assert reconciled.phase == TurnPhase.DELIVERY
 
 
 def test_sender_route_isolation_creates_distinct_conversations(tmp_path):
@@ -129,6 +217,117 @@ def test_same_route_second_turn_receives_delivered_history(tmp_path):
     assert result.turns[0].response in contents
     assert "first question" in contents
     assert "follow up" in contents
+
+
+def test_due_schedule_is_trusted_system_wakeup_without_channel_inbox(tmp_path):
+    with GatewayHost(scheduled_job(), tmp_path) as host:
+        result = host.run_due(deliver=False)
+        turn = result.turns[0]
+        wakeup = host.wakeup_store.get(turn.wakeup_id)
+
+    assert result.processed == 1
+    assert turn.source == WakeupSource.SCHEDULE
+    assert turn.trust == WakeupTrust.TRUSTED_SYSTEM
+    assert turn.inbox_id is None
+    assert turn.status == TurnStatus.WAITING
+    assert wakeup.status == WakeupStatus.COMPLETED
+
+
+def test_job_schedule_install_and_due_collection_are_idempotent(tmp_path):
+    with GatewayHost(scheduled_job(), tmp_path) as host:
+        first = host.install_job_schedules()
+        second = host.install_job_schedules()
+        due = host.collect_due()
+        replay = host.collect_due()
+
+    assert first[0]["id"] == second[0]["id"]
+    assert len(due) == 1
+    assert replay == []
+
+
+def test_background_notifications_are_deduped_and_processed_as_system(tmp_path):
+    notice = {
+        "task_id": 4,
+        "status": "completed",
+        "message": "trusted job completed",
+        "exit_code": 0,
+        "finished_at": 1786075200.0,
+    }
+    source = FakeNotificationSource([notice])
+    route = ConversationRoute(
+        channel="mock",
+        account_id="primary",
+        conversation_id="conversation-1",
+        sender_id="user-1",
+    )
+    factory = lambda _state, _scripted: ScriptedLLM(responses("background answer"))
+    with GatewayHost(job(), tmp_path, provider_factory=factory) as host:
+        first = host.collect_notifications(source, route, source_instance="worker-a")
+        second = host.collect_notifications(source, route, source_instance="worker-a")
+        turn = host.process_wakeup(first[0].id, deliver=False)
+
+    assert first[0].id == second[0].id
+    assert turn.source == WakeupSource.BACKGROUND
+    assert turn.trust == WakeupTrust.TRUSTED_SYSTEM
+    assert turn.inbox_id is None
+    assert turn.response == "background answer"
+
+
+def test_schedule_content_enters_system_context_not_user_role(tmp_path):
+    providers = []
+
+    def factory(_state, scripted):
+        provider = CapturingProvider(scripted)
+        providers.append(provider)
+        return provider
+
+    with GatewayHost(scheduled_job(), tmp_path, provider_factory=factory) as host:
+        host.run_due(deliver=False)
+
+    messages = providers[0].messages[0]
+    assert any(
+        item["role"] == "system" and "Run trusted check" in item["content"]
+        for item in messages
+    )
+    assert messages[-1]["role"] == "user"
+    assert "trusted scheduled wakeup" in messages[-1]["content"]
+
+
+def test_manual_wakeup_retains_operator_trust(tmp_path):
+    route = ConversationRoute(
+        channel="mock",
+        account_id="primary",
+        conversation_id="manual-conversation",
+        sender_id="operator",
+    )
+    factory = lambda _state, _scripted: ScriptedLLM(responses("manual answer"))
+    with GatewayHost(job(), tmp_path, provider_factory=factory) as host:
+        record, created = host.ingest_manual(
+            "operator request",
+            route,
+            event_id="manual-1",
+        )
+        result = host.process_wakeup(record.id, deliver=False)
+
+    assert created is True
+    assert result.source == WakeupSource.MANUAL
+    assert result.trust == WakeupTrust.OPERATOR
+
+
+def test_list_pending_separates_waiting_turn_and_outbox(tmp_path):
+    with GatewayHost(job(), tmp_path) as host:
+        waiting = host.run_job(deliver=False).turns[0]
+        inspection = host.list_pending()
+
+    assert inspection["wakeups"] == []
+    assert inspection["turns"] == [{
+        "run_id": waiting.run_id,
+        "wakeup_id": waiting.wakeup_id,
+        "phase": "delivery",
+        "status": "waiting",
+        "outbox_id": waiting.outbox_id,
+    }]
+    assert inspection["outbox"][0]["status"] == "pending"
 
 
 def test_missing_response_submit_blocks_and_returns_inbox_to_queue(tmp_path):

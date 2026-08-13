@@ -5,8 +5,9 @@ import os
 import queue
 import threading
 import time
+from copy import deepcopy
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 
 def cron_matches(cron_expr: str, dt: datetime) -> bool:
@@ -52,7 +53,7 @@ class Scheduler:
         self._persist_path = persist_path
         self._check_interval_seconds = check_interval_seconds
         self._lock = threading.RLock()
-        self._notifications: queue.Queue = queue.Queue()
+        self._notifications: queue.Queue[Dict[str, Any]] = queue.Queue()
         self._stop_event = threading.Event()
         self._closed = False
         self._checker: Optional[threading.Thread] = None
@@ -85,6 +86,7 @@ class Scheduler:
         cron: Optional[str] = None,
         delay_seconds: Optional[int] = None,
         max_fires: Optional[int] = None,
+        metadata: Optional[Mapping[str, Any]] = None,
     ) -> Dict[str, Any]:
         if self._closed:
             raise RuntimeError("Scheduler is closed")
@@ -98,6 +100,7 @@ class Scheduler:
             raise ValueError("delay_seconds must be non-negative")
         if max_fires is not None and max_fires < 1:
             raise ValueError("max_fires must be positive")
+        schedule_metadata = _validate_metadata(metadata)
 
         fire_at = None
         if delay_seconds is not None:
@@ -118,20 +121,22 @@ class Scheduler:
                 "last_fired_minute": None,
                 "fire_count": 0,
                 "max_fires": max_fires,
+                "metadata": schedule_metadata,
             }
             self._schedules[schedule_id] = schedule
         self._save()
-        return schedule
+        return deepcopy(schedule)
 
     def get(self, schedule_id: int) -> Dict[str, Any]:
-        return self._require(schedule_id)
+        with self._lock:
+            return deepcopy(self._require(schedule_id))
 
     def pause(self, schedule_id: int) -> Dict[str, Any]:
         with self._lock:
             schedule = self._require(schedule_id)
             schedule["status"] = "paused"
         self._save()
-        return schedule
+        return deepcopy(schedule)
 
     def resume(self, schedule_id: int) -> Dict[str, Any]:
         with self._lock:
@@ -142,33 +147,30 @@ class Scheduler:
                 )
             schedule["status"] = "active"
         self._save()
-        return schedule
+        return deepcopy(schedule)
 
     def delete(self, schedule_id: int) -> Dict[str, Any]:
         with self._lock:
             schedule = self._require(schedule_id)
             schedule["status"] = "deleted"
         self._save()
-        return schedule
+        return deepcopy(schedule)
 
     def list(self, status: Optional[str] = None) -> List[Dict[str, Any]]:
         with self._lock:
             schedules = list(self._schedules.values())
             if status:
                 schedules = [item for item in schedules if item["status"] == status]
-            return schedules
+            return deepcopy(schedules)
 
     def drain(self) -> List[Dict[str, Any]]:
         results = []
         while True:
             try:
-                schedule_id = self._notifications.get_nowait()
+                notification = self._notifications.get_nowait()
             except queue.Empty:
                 break
-            with self._lock:
-                schedule = self._schedules.get(schedule_id)
-                if schedule:
-                    results.append(_schedule_notification(schedule))
+            results.append(deepcopy(notification))
         return results
 
     def check_due(self) -> List[Dict[str, Any]]:
@@ -207,7 +209,7 @@ class Scheduler:
         now = time.time()
         dt = datetime.now()
         current_minute = f"{dt.year}-{dt.month}-{dt.day}-{dt.hour}-{dt.minute}"
-        fired_ids = []
+        fired_notifications = []
         with self._lock:
             active = [
                 schedule
@@ -232,11 +234,11 @@ class Scheduler:
                     and schedule["fire_count"] >= schedule["max_fires"]
                 ):
                     schedule["status"] = "expired"
-                fired_ids.append(schedule["id"])
-        if fired_ids:
+                fired_notifications.append(_schedule_notification(schedule))
+        if fired_notifications:
             self._save()
-            for schedule_id in fired_ids:
-                self._notifications.put(schedule_id)
+            for notification in fired_notifications:
+                self._notifications.put(notification)
 
     def _save(self) -> None:
         if not self._persist_path:
@@ -259,7 +261,8 @@ class Scheduler:
             data = json.load(file)
         self._next_id = data.get("next_id", 1)
         self._schedules = {
-            int(key): value for key, value in data.get("schedules", {}).items()
+            int(key): _normalize_loaded_schedule(value)
+            for key, value in data.get("schedules", {}).items()
         }
 
 
@@ -277,6 +280,32 @@ def _schedule_notification(schedule: Dict[str, Any]) -> Dict[str, Any]:
         "schedule_id": schedule["id"],
         "prompt": schedule["prompt"],
         "fire_count": schedule["fire_count"],
+        "fired_at": schedule["last_fired"],
         "status": schedule["status"],
+        "metadata": deepcopy(schedule.get("metadata") or {}),
         "message": "\n".join(lines),
     }
+
+
+def _validate_metadata(value: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise ValueError("metadata must be an object")
+    payload = dict(value)
+    try:
+        encoded = json.dumps(payload, ensure_ascii=False, allow_nan=False)
+        decoded = json.loads(encoded)
+    except (TypeError, ValueError) as error:
+        raise ValueError("metadata must contain finite JSON values") from error
+    if not isinstance(decoded, dict):
+        raise ValueError("metadata must be an object")
+    return decoded
+
+
+def _normalize_loaded_schedule(value: Any) -> Dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError("persisted schedule must be an object")
+    schedule = dict(value)
+    schedule["metadata"] = _validate_metadata(schedule.get("metadata"))
+    return schedule

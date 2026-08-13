@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-973%20passed-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-1012%20passed-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
 </p>
 
@@ -122,9 +122,9 @@ examples/
   nano_claude_code/      # Provider 驱动的交互式 Coding（151 个测试）
   nano_codex/            # 受控 Coding Harness（96 个测试）
   nano_hermes/           # 持久学习型个人 Agent（86 个测试）
-  nano_openclaw/         # 可恢复的多渠道会话 Gateway（58 个测试）
+  nano_openclaw/         # 可恢复的多来源会话 Gateway（89 个测试）
   nano_loop/             # 证据驱动的 Loop Engineering 示例（27 个测试）
-tests/                   # 555 个内核/扩展/Profile/Example 测试
+tests/                   # 563 个内核/扩展/Profile/Example 测试
 ```
 
 ---
@@ -314,8 +314,9 @@ explanation = builder.explain(spec)  # Manifest、Schema、顺序与依赖边
 - **NanoHermes** — 可恢复的 Assist → Reflect → Host Review 个人 Agent，组合跨 Run
   Memory/Skill、内容寻址的暂存学习、彼此独立的动作/晋升审批、到期 Schedule 触发与
   隔离委派；
-- **NanoOpenClaw** — 可恢复的多渠道会话 Host，提供稳定路由、Turn 恢复、已交付
-  历史上下文、只读工具，并通过公共 Channel Extension 执行独立审批的 Outbox 交付；
+- **NanoOpenClaw** — 可恢复的多来源会话 Host，将 Channel、Scheduler、Background
+  与 Operator 输入统一成分级信任的 Wakeup，并把可恢复的响应生成与经审批的 Outbox
+  交付拆成两个独立阶段；
 
 ```bash
 python examples/nano_claude_code/profile_demo.py
@@ -368,7 +369,7 @@ def chat(self, messages, tools=None) -> LLMResponse: ...
 ## 测试
 
 ```bash
-# 内核、公共扩展、Profile 与 Example 契约测试（555 个）
+# 内核、公共扩展、Profile 与 Example 契约测试（563 个）
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # NanoClaudeCode 应用层测试（151 个：109 UT + 42 ST）
@@ -381,7 +382,7 @@ cd ../nano_codex && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 # NanoHermes 持久学习测试（86 个）
 cd ../nano_hermes && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
-# NanoOpenClaw 会话、Turn、恢复与交付测试（58 个）
+# NanoOpenClaw Wakeup、路由、Turn、恢复与交付测试（89 个）
 cd ../nano_openclaw && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 
 # NanoLoop 测试（27 个）
@@ -389,7 +390,7 @@ cd ../nano_loop
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 ```
 
-**共 973 个测试。** 可复用 Extension 行为统一在根测试集验证，各 Example
+**共 1012 个测试。** 可复用 Extension 行为统一在根测试集验证，各 Example
 测试集中验证自己拥有的组合、策略与集成边界。内核测试只需要内核依赖与 pytest；
 真实 MCP stdio 测试使用 `mcp` 可选依赖。
 

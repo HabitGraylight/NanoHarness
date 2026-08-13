@@ -4,12 +4,15 @@ import pytest
 from pydantic import ValidationError
 
 from app.models import (
+    ConversationExchange,
     ConversationRoute,
     ConversationState,
     GatewayJob,
     GatewayTurnState,
     TurnPhase,
     TurnStatus,
+    WakeupSource,
+    WakeupTrust,
     stable_turn_id,
 )
 from nanoharness.extensions.channels import InboundEnvelope
@@ -91,6 +94,39 @@ def test_job_rejects_duplicate_channel_message_identity():
         GatewayJob.model_validate(payload)
 
 
+def test_job_can_describe_schedule_only_runtime():
+    job = GatewayJob.model_validate({
+        "name": "schedule-only",
+        "schedules": [{
+            "name": "check",
+            "prompt": "Check status",
+            "account_id": "primary",
+            "conversation_id": "conversation-1",
+            "sender_id": "user-1",
+            "delay_seconds": 0,
+            "responses": [{"content": "done"}],
+        }],
+    })
+
+    assert job.messages == []
+    assert job.scripted is True
+
+
+def test_job_rejects_invalid_scheduled_route_during_parse():
+    with pytest.raises(ValidationError, match="account_id"):
+        GatewayJob.model_validate({
+            "name": "bad-route",
+            "schedules": [{
+                "name": "check",
+                "prompt": "Check status",
+                "account_id": "",
+                "conversation_id": "conversation-1",
+                "sender_id": "user-1",
+                "delay_seconds": 0,
+            }],
+        })
+
+
 @pytest.mark.parametrize("path", ["../escape.txt", "/tmp/escape", "a/../../b"])
 def test_job_rejects_unsafe_fixture_paths(path):
     payload = job_payload()
@@ -142,6 +178,24 @@ def test_turn_delivery_phase_requires_a_response():
 def test_completed_status_requires_completed_phase():
     with pytest.raises(ValidationError, match="completed phase"):
         turn_state(status=TurnStatus.COMPLETED)
+
+
+def test_turn_rejects_trust_that_does_not_match_its_source():
+    with pytest.raises(ValidationError, match="trust"):
+        turn_state(trust=WakeupTrust.TRUSTED_SYSTEM)
+
+
+def test_conversation_exchange_rejects_trust_that_does_not_match_source():
+    with pytest.raises(ValidationError, match="trust"):
+        ConversationExchange(
+            turn_id="turn-1",
+            source=WakeupSource.SCHEDULE,
+            trust=WakeupTrust.UNTRUSTED,
+            external_message_id="schedule-1",
+            user_content="check status",
+            assistant_content="done",
+            delivered=True,
+        )
 
 
 def test_job_file_must_contain_an_object(tmp_path):

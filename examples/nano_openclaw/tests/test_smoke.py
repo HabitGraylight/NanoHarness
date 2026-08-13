@@ -10,12 +10,15 @@ def test_nano_openclaw_runs_two_durable_conversation_turns(tmp_path):
 
     assert result.profile == "nano-openclaw"
     assert result.success is True
-    assert result.processed == 2
-    assert result.delivered == 2
+    assert result.processed == 3
+    assert result.delivered == 3
     assert result.turns[0].tools == ["response_submit", "workspace_read"]
     assert result.turns[1].tools == ["response_submit"]
-    assert result.turns[0].conversation_id == result.turns[1].conversation_id
-    assert result.turns[0].session_id == result.turns[1].session_id
+    assert result.turns[2].tools == ["response_submit"]
+    assert result.turns[2].source.value == "schedule"
+    assert result.turns[2].trust.value == "trusted_system"
+    assert len({turn.conversation_id for turn in result.turns}) == 1
+    assert len({turn.session_id for turn in result.turns}) == 1
     assert all(turn.delivery_status == OutboxStatus.SENT for turn in result.turns)
     assert all(Path(turn.artifact.trace_path).exists() for turn in result.turns)
 
@@ -36,9 +39,15 @@ def test_demo_persists_completed_inbox_outbox_turn_and_conversation(tmp_path):
         OutboxStatus.SENT.value
     }
     exchanges = next(iter(conversation_state.values()))["exchanges"]
-    assert [exchange["delivered"] for exchange in exchanges] == [True, True]
+    assert [exchange["delivered"] for exchange in exchanges] == [True, True, True]
     assert [exchange["turn_id"] for exchange in exchanges] == [
         turn.run_id for turn in result.turns
+    ]
+    scheduled_outbox = channel_state["outbox"][result.turns[2].outbox_id]
+    assert len(scheduled_outbox["attempts"]) == 2
+    assert [attempt["status"] for attempt in scheduled_outbox["attempts"]] == [
+        "failed",
+        "sent",
     ]
 
 
@@ -56,4 +65,4 @@ def test_demo_replay_is_idempotent(tmp_path):
         (tmp_path / "runtime" / "channels" / "state.json").read_text()
     )
     assert len(channel_state["inbox"]) == 2
-    assert len(channel_state["outbox"]) == 2
+    assert len(channel_state["outbox"]) == 3

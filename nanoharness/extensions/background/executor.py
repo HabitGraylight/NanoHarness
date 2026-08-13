@@ -330,5 +330,9 @@ def _task_notification(
     return {
         "task_id": task.id,
         "status": task.status,
+        "exit_code": task.exit_code,
+        "started_at": task.started_at,
+        "finished_at": task.finished_at,
+        "log_path": task.log_path,
         "message": "\n".join(lines),
     }

@@ -59,6 +59,7 @@ def register_schedule_tools(
                 if args.get("max_fires") is not None
                 else None
             ),
+            metadata=args.get("metadata"),
         )
         when = (
             f"cron: {schedule['cron']}"
@@ -115,6 +116,10 @@ def register_schedule_tools(
                 "cron": {"type": "string", "description": "Five-field cron"},
                 "delay_seconds": {"type": "integer", "description": "One-shot delay"},
                 "max_fires": {"type": "integer", "description": "Maximum fires"},
+                "metadata": {
+                    "type": "object",
+                    "description": "Transport-neutral host metadata returned on fire",
+                },
             },
             ["prompt"],
         ),
