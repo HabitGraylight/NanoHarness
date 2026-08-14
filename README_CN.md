@@ -1,133 +1,32 @@
 <p align="center">
-  <img src="assets/NanoharnessMain.png" alt="NanoHarness" width="640">
+  <img src="assets/NanoharnessHeader.png" alt="NanoHarness" width="760">
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
-  <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Tests-1012%20passed-brightgreen.svg" alt="Tests">
-  <img src="https://img.shields.io/badge/Framework-ETCSLV-purple.svg" alt="ETCSLV">
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python 3.10+"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/HabitGraylight/NanoHarness?color=2ea44f" alt="MIT License"></a>
+  <a href="https://github.com/HabitGraylight/NanoHarness/commits/main"><img src="https://img.shields.io/github/last-commit/HabitGraylight/NanoHarness?color=6f42c1" alt="Last commit"></a>
 </p>
-
-<h1 align="center">NanoHarness</h1>
 
 <p align="center">
-  <b>基于 H&nbsp;=&nbsp;(E,&nbsp;T,&nbsp;C,&nbsp;S,&nbsp;L,&nbsp;V) 的极简 Agent 框架</b>
+  <strong>一个用于构建白箱 AI Agent 的极简、可组合框架。</strong>
 </p>
 
-[English](README.md) | 中文
+<p align="center">
+  <a href="README.md">English</a> · 中文
+</p>
 
----
+NanoHarness 是一个小型 Python 框架，用明确、可替换的部件构建 LLM Agent。它提供一个执行引擎、类型化协议、可复用 Extension、声明式 Profile 和完整可运行示例，同时避免把状态、策略和控制流藏在庞大的应用框架里。
 
-## 概述
+你可以用同一套基础搭建 Coding Agent、持久个人 Agent、多渠道 Gateway 或证据驱动的工程循环。每个应用可以选择完全不同的 Harness，只共享真正应该复用的部分。
 
-NanoHarness 是一个极简的 Python Agent 框架，实现了 [Agent Harness Survey](https://github.com/Gloriaameng/Awesome-Agent-Harness) 提出的六组件治理模型：
+## 为什么选择 NanoHarness
 
-| | 组件 | 职责 |
-|:---:|---|---|
-| **E** | 执行循环 | 思考 → 行动 → 观察循环、终止条件、错误恢复 |
-| **T** | 工具注册 | 类型化工具目录、路由、Schema 校验 |
-| **C** | 上下文管理 | 上下文窗口的组装与压缩 |
-| **S** | 状态存储 | 跨轮次持久化与崩溃恢复 |
-| **L** | 生命周期钩子 | 横切面插桩：日志、策略、认证 |
-| **V** | 评估 | 轨迹记录、循环中早停检测、独立目标验证 |
-
-内核**只**提供这六个接口和一个编排引擎。其余一切——调用哪个 LLM、如何管理记忆、是否执行权限校验——均由应用层决定。
-
----
-
-## 架构
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                       NanoHarness 内核                           │
-│                                                                 │
-│   ┌─────────────────────────────────────────────────────────┐  │
-│   │  E: NanoEngine                                          │  │
-│   │                                                         │  │
-│   │    ON_START ──► Think ──► Act ──► Observe ──► ON_STEP   │  │
-│   │                    │         │          │       │        │  │
-│   │                    ▼         ▼          ▼       ▼        │  │
-│   │               LLMProtocol  T: Tools  C: Context         │  │
-│   │                                              V: Eval    │  │
-│   │                                    should_stop? ──► STOP │  │
-│   │                                                         │  │
-│   │    ON_END ◄── V: Report + evaluate_success              │  │
-│   └─────────────────────────────────────────────────────────┘  │
-│                                                                 │
-│   接口：  BaseToolRegistry  BaseContextManager                  │
-│           BaseStateStore    BaseHookManager                     │
-│           BaseEvaluator     LLMProtocol                         │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                        构造函数注入
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                         应用层                                  │
-│                                                                 │
-│   LLM 适配器  ·  记忆策略  ·  权限策略  ·  工具组装              │
-│   Prompt 模板  ·  UI / 输出                                     │
-│                                                                 │
-│   组装：main.py 或各项目专属 builder                             │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**设计原则：** 引擎不包含应用专属的 Prompt、记忆、策略规则、审批界面、沙箱实现或输出 UI。它只编排注入的协议，因此可以安全地在不同 Agent 应用间共享。
-
----
-
-## 结构
-
-```
-nanoharness/
-  core/                  # 内核：接口 + 引擎
-    schema.py            #   消息、工具执行、Run/Checkpoint、事件与评估协议
-    base.py              #   ETCSLV ABCs, LLMProtocol, HookStage
-    engine.py            #   NanoEngine（含循环中评估）
-    runtime.py           #   RunControl（协作式取消 + Steering）
-    prompt.py            #   PromptManager（YAML 模板加载器）
-  components/            # ETCSLV 最简实现
-    llm/                 #   E：可选 OpenAI-compatible Provider Adapter
-    tools/               #   T: DictToolRegistry, ScriptToolRegistry
-    context/             #   C: SimpleContextManager
-    state/               #   S: JsonStateStore
-    hooks/               #   L: SimpleHookManager
-    lifecycle/           #   Policy、审批、执行器与事件组件
-    evaluator/           #   V: TraceEvaluator（含 should_stop + evaluate_success）
-  extensions/            # 可复用能力包
-    base.py              #   Manifest、配置、安装、关闭与回执协议
-    manager.py           #   依赖/冲突校验、安装清单与生命周期
-    background/          #   托管 Shell 进程与完成通知
-    channels/            #   与传输无关的持久 Inbox/Outbox 与 Adapter
-    memory/              #   FileMemoryManager + MemoryExtension
-    mcp/                 #   MCP stdio 客户端与动态 MCP 工具
-    scheduler/           #   持久化 cron/延时调度服务
-    skills/              #   SkillRegistry + SkillsExtension
-    subagents/           #   单次隔离委派运行时
-    tasks/               #   持久化依赖型 Task Board
-    teams/               #   托管长期队友与 Inbox 协议
-    worktrees/           #   与 Task 绑定的 Git worktree lane
-  profiles/              # Profile、阶段式装配、Trace、对比与自动矩阵
-  testing/               # 确定性 Scenario、脚本 Provider 与 Artifact
-  utils/                 # get_logger, count_tokens
-configs/
-  prompts.yaml           # Prompt 模板
-  scripts/               # Shell 脚本工具（自动发现，27 个）
-recipes/                 # 声明式 Profile 与 Trace 检查夹具
-  coding_team.yaml
-  solo_subagent.yaml
-  traces/
-examples/
-  nano_claude_code/      # Provider 驱动的交互式 Coding（151 个测试）
-  nano_codex/            # 受控 Coding Harness（96 个测试）
-  nano_hermes/           # 持久学习型个人 Agent（86 个测试）
-  nano_openclaw/         # 可恢复的多来源会话 Gateway（89 个测试）
-  nano_loop/             # 证据驱动的 Loop Engineering 示例（27 个测试）
-tests/                   # 563 个内核/扩展/Profile/Example 测试
-```
-
----
+- **极简内核** — 一个引擎通过小型接口协调工具、上下文、状态、Hook 与评估。
+- **白箱组合** — 应用的组装方式、权限、Prompt 和生命周期决策都可见、可替换。
+- **可复用中间层** — Memory、Skills、MCP、Scheduler、Channel、Task、Team 和 Worktree 等能力统一放在 Extension 中。
+- **一种基础，多种 Harness** — 每个 Example 都是完整、可独立运行的 Agent，而不是只有几行配置的演示壳。
+- **面向检查与恢复** — 类型化事件、Checkpoint、Trace、持久队列、可恢复 Run 和明确的审批边界都是一等能力。
 
 ## 快速开始
 
@@ -135,96 +34,120 @@ tests/                   # 563 个内核/扩展/Profile/Example 测试
 git clone https://github.com/HabitGraylight/NanoHarness.git
 cd NanoHarness
 pip install -e .
+
+# 无需 API Key 或网络，运行确定性的多来源 Agent。
+python examples/nano_openclaw/main.py
 ```
 
-内核仅依赖 Pydantic 和 PyYAML。LLM 客户端和其他集成由各应用按需安装。
+内核只依赖 Pydantic 和 PyYAML。Provider 与外部集成都采用可选依赖：
 
 ```bash
-# 运行最简示例
-python main.py
-
-# 运行 Coding Agent
-cd examples/nano_claude_code && python main.py
-
-# 运行证据驱动的 Loop
-cd examples/nano_loop
-python main.py run configs/loops/local_fix.yaml --repo ../.. --task "你的任务"
+pip install -e ".[openai]"   # OpenAI-compatible Provider
+pip install -e ".[mcp]"      # MCP stdio Server
 ```
 
----
+根目录 `main.py` 是最小的真实 Provider 组装示例。安装 OpenAI 可选依赖、设置 `DEEPSEEK_API_KEY` 后，可以运行 `python main.py`。
 
-## 引擎循环
+## 完整 Harness 示例
 
+这些 Example 直接展示框架为什么可组合：它们共享内核和公共 Extension，但分别拥有自己的入口、Profile、Host Policy、状态模型、Prompt、Scenario、测试与文档。
+
+| Example | Harness 风格 | 运行方式 |
+|---|---|---|
+| [NanoClaudeCode](examples/nano_claude_code/) | 带 Memory、Skills、Task、Team、Subagent 和写入审批的交互式 Coding Session | `python examples/nano_claude_code/profile_demo.py` |
+| [NanoCodex](examples/nano_codex/) | 可恢复的 Plan → Execute → Review Coding，提供有界工具和受控 Git 交付 | `python examples/nano_codex/main.py` |
+| [NanoHermes](examples/nano_hermes/) | 持久 Assist → Reflect → Host Review，支持暂存学习和定时触发 | `python examples/nano_hermes/main.py` |
+| [NanoOpenClaw](examples/nano_openclaw/) | 分级信任的 Channel/Scheduler/Background Wakeup、持久会话与独立交付 | `python examples/nano_openclaw/main.py` |
+| [NanoLoop](examples/nano_loop/) | 带预算、验证和明确人工 Gate 的证据驱动外层循环 | `python examples/nano_loop/main.py --help` |
+
+确定性入口不需要 API Key 或网络。它们也是持久化、恢复、策略、审批和测试的具体参考实现，而不只是 Happy Path Demo。
+
+## 组合方式
+
+```text
+应用 / Example
+├── Host Policy、Prompt、UI 与 Provider Adapter
+├── Harness Profile：声明组装内容
+├── Components：Tools、Context、State、Hooks、Evaluator
+└── Extensions：Memory、Channels、Scheduler、Teams、...
+                         │
+                         ▼
+                    NanoEngine
+               think → act → observe
+                         │
+                         ▼
+               Event、Checkpoint、Report
 ```
-NanoEngine.run(query)
-     │
-     ├─ L.trigger(ON_TASK_START)
-     ├─ C.add_message(user)
-     │
-     └─ 循环直到终止或达到 max_steps:
-          │
-          ├─ Think:  E → LLM.chat(C.get_full_context(), T.get_schemas())
-          ├─ L.trigger(ON_THOUGHT_READY)
-          │
-          ├─ Act:    对每个 tool_call:
-          │            PolicyDecision → 可选 ApprovalBroker
-          │            → ToolExecutor（注册表 / 沙箱 / 远程）
-          │            C.add_message(observation)
-          │
-          ├─ S.save_state()
-          ├─ V.log_step()
-          ├─ V.should_stop()?  ──► 若陷入循环/停滞则提前终止
-          └─ L.trigger(ON_STEP_END)
 
-     ├─ V.get_report()        （包含 evaluate_success 验证结果）
-     └─ L.trigger(ON_TASK_END)
+这些边界是有意设计的：
+
+1. **Kernel** 定义执行协议并协调一次 Run。
+2. **Components** 提供这些协议的最小默认实现。
+3. **Extensions** 用明确依赖和生命周期管理封装可复用能力。
+4. **Applications** 决定 Agent 可以做什么，以及用户如何与其交互。
+
+引擎不知道应用专属的 Prompt、权限规则、审批 UI、沙箱实现或交付策略。
+
+## 小型内核与明确协议
+
+内核协调六类可替换的关注点。使用 NanoHarness 前不需要先学习任何理论模型；这些名称只是在说明应用可以替换哪些边界。
+
+| 关注点 | 协议 | 职责 |
+|---|---|---|
+| Execution | `NanoEngine` / `LLMProtocol` | Think → Act → Observe 循环与终止 |
+| Tools | `BaseToolRegistry` | 类型化工具目录、校验与路由 |
+| Context | `BaseContextManager` | Prompt 与会话上下文组装 |
+| State | `BaseStateStore` | Checkpoint 与跨 Turn 持久化 |
+| Lifecycle | `BaseHookManager` | Run 与 Step 边界的插桩 |
+| Evaluation | `BaseEvaluator` | 轨迹记录、提前停止与成功判定 |
+
+```python
+from nanoharness import (
+    DictToolRegistry,
+    JsonStateStore,
+    NanoEngine,
+    SimpleContextManager,
+    SimpleHookManager,
+    TraceEvaluator,
+)
+
+# my_llm 实现 LLMProtocol。
+engine = NanoEngine(
+    llm_client=my_llm,
+    tools=DictToolRegistry(),
+    context=SimpleContextManager(system_prompt="You are a careful assistant."),
+    state=JsonStateStore("run_state.json"),
+    hooks=SimpleHookManager(),
+    evaluator=TraceEvaluator(),
+)
+
+report = engine.run("Inspect the task and report what you find.")
 ```
 
-引擎内部没有应用策略规则、审批 UI 或沙箱逻辑——全部通过注入的协议实现流转。
+Tool 执行也拥有可替换的独立路径：
 
----
+```text
+ToolCall → PolicyDecision → 可选 Approval → ToolExecutor → Observation
+```
 
-## Core Protocol v2
-
-核心协议 v2 在保持 `NanoEngine.run(query)` 和原有字典报告兼容的同时，增加了：
-
-- 稳定的 `run_id`、`session_id`、协议版本与运行状态；
-- Provider ToolCall ID 的保留，以及 Engine 生成的稳定回退 ID；
-- `StepResult.actions` 完整多工具执行轨迹；
-- 有序 `HarnessEvent` 事件流与可选 `EventSinkProtocol`；
-- 包含查询、轨迹、终止原因和错误的 `RunCheckpoint`；
-- 每个 Run 独立的评估轨迹，Context 仍可在同一 Session 内持续；
-- `EvaluationResult.achieved` 作为正式成功判定。
-
-旧的 `StepResult.action` 和 `observation` 字段暂时保留，并映射到该步最后一次工具执行。
-
-## 生命周期策略与异步 Runtime
-
-协议 v2.1 为工具生命周期增加了明确边界：
-
-- `ToolPolicyProtocol` 在工具执行前后返回类型化 `PolicyDecision`；
-- `ApprovalBrokerProtocol` 将交互式或远程审批从策略判定中分离；
-- `ToolExecutorProtocol` 成为本地、沙箱或远程执行的可替换边界；
-- `CompositeToolPolicy` 以确定的优先级组合权限策略和 Tool Hook；
-- `EventBus`、`RedactingEventSink`、`JsonlEventSink` 和 `ConsoleEventSink` 组成可组合的实时观测管线；
-- `NanoEngine.arun()` 与 `NanoEngine.astream()` 分别提供异步报告和实时事件接口；
-- `RunControl` 在安全的步骤边界提供协作式取消与 Steering。
-
-旧的 `permissions=` 和 `tool_hooks=` 构造参数继续兼容；NanoClaudeCode 通过应用 Builder 绑定类型化策略与审批协议。
-
----
+因此权限策略、人工审批和本地/沙箱/远程执行可以彼此独立。
 
 ## 可复用 Extensions
 
-Extension Protocol 1.0 为可复用能力提供统一的白箱结构：
+Extension 把工具和服务安装到明确的 `ExtensionContext`。每个 Extension 都有版本化 Manifest、类型化配置、依赖声明、安装回执和受控关闭流程。
 
-- `ExtensionManifest` 声明带版本的能力、依赖和冲突；
-- 每个 Extension 在安装前即可输出 Pydantic 配置 Schema；
-- `ExtensionContext` 是显式的工具、服务和能力安装表面；
-- `ExtensionInstallation` 是可序列化的工具与服务安装回执；
-- `NotificationSourceProtocol` 为长生命周期服务提供统一的 Host `drain()` 契约；
-- `ExtensionManager.inspect()` 返回能力、服务、安装回执和解析后的依赖边；
-- `ExtensionManager.close()` 按安装顺序的逆序关闭资源型扩展，且只执行一次。
+| Extension | 可复用能力 |
+|---|---|
+| Memory | 基于 Markdown 的保存、回忆与列表 |
+| Skills | Metadata 发现与按需指令加载 |
+| MCP | 官方 SDK stdio Session 与动态工具发现 |
+| Background | 托管 Shell 进程与完成通知 |
+| Channels | 与传输无关的持久 Inbox/Outbox、审批、重试与 Adapter |
+| Scheduler | 持久 Cron/Delay 触发和触发时通知 |
+| Tasks | 依赖型 Task Board、Claim、Role 与工具 |
+| Teams | 长期 Teammate 与持久 Inbox/Request 协议 |
+| Subagents | 可选 Context Fork 的单次隔离委派 |
+| Worktrees | 与 Task 绑定、经过审计的 Git Worktree Lane |
 
 ```python
 from nanoharness import DictToolRegistry, ExtensionContext, ExtensionManager
@@ -234,185 +157,89 @@ context = ExtensionContext(tools=DictToolRegistry())
 extensions = ExtensionManager(context)
 extensions.install(MemoryExtension(), {"directory": ".memory"})
 
-print(extensions.inspect())
 memory = context.services["memory"]
+print(extensions.inspect())
 extensions.close()
 ```
 
-可复用能力包包括：
+## 声明式 Profile 与检查工具
 
-- `MemoryExtension` — Markdown 记忆存储，以及 save/recall/list 工具；
-- `SkillsExtension` — 目录发现、元数据索引和按需加载完整指令；
-- `MCPExtension` — 基于官方 MCP SDK 的 stdio 会话、动态工具发现、配置回执脱敏和子进程托管关闭；
-- `BackgroundExtension` — 有并发上限的 Shell 执行、工作目录边界、完成通知和关闭取消；
-- `ChannelExtension` — 与传输无关的持久 Ingress/Outbox、消息去重、Claim 恢复、显式投递审批/重试、Adapter 幂等键和确定性 Mock Adapter；其只入队不发送的 Tool 由具体 Host 使用 Run 作用域显式注册；
-- `SchedulerExtension` — 持久化 cron/延时 Prompt、托管检查线程和触发通知；
-- `TaskExtension` — 持久化依赖任务、claim、角色和 schema-first Task 工具；
-- `TeamExtension` — 长期队友循环、持久化 Inbox/Request 协议、Task Board 自动 claim、通知和可等待关闭；
-- `SubagentExtension` — 单次只读委派，并可选择 fork 父上下文；
-- `WorktreeExtension` — 带审计事件的 Git 执行 lane，通过 `requires=["tasks.board"]` 显式依赖 Task Board。
-
-NanoClaudeCode 通过 `ExtensionManager` 安装九个公共扩展；Team 与 Subagent 还显式声明宿主运行时依赖，因此 `inspect()` 能同时显示扩展提供与宿主提供的依赖边。其本地模块公开应用所需的公共 Extension API。MCP 仍是可选能力，只有需要外部服务器的 Profile 才需安装 `nanoharness[mcp]`。
-
-## Harness Profiles
-
-HarnessSpec 1.0 将 Extension 组合与 ETCSLV 运行时绑定表达为可移植的
-YAML、TOML 或 JSON 配方。声明中只记录宿主提供的 Capability 与 Service
-名称，不会尝试序列化真实 LLM 或 Context 对象。
-
-`HarnessBuilder` 可以无副作用地校验配置，按能力依赖计算确定性的安装顺序，
-解释 Provider、冲突与配置 Schema，安装 Extension，并将最终工具注册表和宿主
-Service 绑定为 `NanoEngine`。
-
-`StagedAssembler` 用于处理必须先安装 Bootstrap Extension、之后才能绑定宿主
-Service 的应用，并保持唯一显式顺序：Bootstrap Extension → Host Bind → Runtime
-Extension。应用随后可以使用完整的 Service 绑定构建 Engine。
+`HarnessSpec` 使用 YAML、TOML 或 JSON 描述 Host Requirement、Extension 和 Engine Service Binding。`HarnessBuilder` 可以无副作用地校验 Profile、解析依赖、解释 Provider 与冲突，并构建声明的组合。
 
 ```bash
 python -m nanoharness.profiles validate recipes/coding_team.yaml
 python -m nanoharness.profiles explain recipes/coding_team.yaml
 python -m nanoharness.profiles catalog
-python -m nanoharness.profiles matrix recipes/solo_subagent.yaml recipes/coding_team.yaml
-python -m nanoharness.profiles trace recipes/traces/solo.json
-python -m nanoharness.profiles compare recipes/traces/solo.json recipes/traces/team.json
+python -m nanoharness.profiles matrix \
+  recipes/solo_subagent.yaml recipes/coding_team.yaml
+python -m nanoharness.profiles compare \
+  recipes/traces/solo.json recipes/traces/team.json
 ```
 
-```python
-from nanoharness import HarnessBuilder, HarnessSpec
+Profile Matrix 会显示准确的 Component、Policy、Capability、Extension 与 Host Service 差异。Trace Comparison 只报告事实差异，不给不同 Harness 排名，也不会暴露原始 Thought、工具参数、输出或 Evaluator Explanation。
 
-spec = HarnessSpec.from_file("recipes/coding_team.yaml")
-builder = HarnessBuilder()
+## Runtime 与恢复能力
 
-validation = builder.validate(spec)  # 不创建文件、工具或线程
-explanation = builder.explain(spec)  # Manifest、Schema、顺序与依赖边
+NanoHarness 把可靠性机制保持为可见能力，而不是埋进某个 Host 应用：
 
-# build = builder.build(spec, context=host_extension_context)
-# engine = build.engine              # spec.engine 已声明时生成
-# build.close()                      # 关闭所有资源型 Extension
+- 稳定 Run/Session Identity 与终态；
+- 保留 Provider Call ID 的无损多工具 Step；
+- 有序 Event Stream 与 Redacting/JSONL/Console Sink；
+- 包含轨迹、停止原因和错误的崩溃可读 Checkpoint；
+- 正式 Evaluator 成功判定与循环中提前停止；
+- Async Run 与 Event Stream API；
+- 在安全 Step 边界协作式取消与 Steering；
+- 由对应 Extension 和 Example 提供的持久 Inbox/Outbox、Schedule Notification 与可恢复 Host State。
+
+同步 `NanoEngine.run(query)` 和兼容字段仍然保留。
+
+## 项目结构
+
+```text
+nanoharness/
+  core/          # 协议、Schema、NanoEngine、Run Control
+  components/    # 最小默认实现
+  extensions/    # 可复用能力包
+  profiles/      # 声明式组合与检查
+  testing/       # 确定性 Provider、Scenario、Artifact
+examples/        # 五个完整、可独立运行的 Harness
+recipes/         # Profile 与 Trace 检查夹具
+tests/           # Kernel、Extension、Profile 与 Example Contract
 ```
-
-`explain` 会脱敏常见密钥字段及完整 `env` 映射。离线校验把声明的宿主需求
-视为假设；`build()` 会在安装任何 Extension 前检查真实 Capability 与 Service。
-
-`matrix` 会把一个或多个 Profile 转换为 ETCSLV、策略、能力、扩展与宿主 Service
-矩阵。`trace` 将 NanoEngine Report、Checkpoint 或 JSONL Event Stream 归一化为
-最小内容指标，并省略原始 Thought、工具参数、Observation、输出和评估解释。
-`compare` 可以比较两个 Profile 或两个 Trace，只报告事实差异，不判定胜负。
-
----
-
-## 独立可运行 Harness
-
-每个 Harness 都拥有自己的入口、Profile、应用 Policy、Scenario、测试和文档；
-它们复用 NanoHarness 公共包，但不会导入其他 Example 的应用代码：
-
-- **NanoClaudeCode** — 交互式、Session 导向的 Coding Harness，组合 Memory、
-  Skills、Task/Team 委派与写入审批；
-- **NanoCodex** — 面向托管或既有 Git 仓库的可恢复 Plan → Execute → Review
-  Coding Harness，可接真实 Provider，提供有界 Coding 工具、交互式变更/交付审批、
-  Host 可信证据以及 keep/commit/apply/merge 交付；
-- **NanoHermes** — 可恢复的 Assist → Reflect → Host Review 个人 Agent，组合跨 Run
-  Memory/Skill、内容寻址的暂存学习、彼此独立的动作/晋升审批、到期 Schedule 触发与
-  隔离委派；
-- **NanoOpenClaw** — 可恢复的多来源会话 Host，将 Channel、Scheduler、Background
-  与 Operator 输入统一成分级信任的 Wakeup，并把可恢复的响应生成与经审批的 Outbox
-  交付拆成两个独立阶段；
-
-```bash
-python examples/nano_claude_code/profile_demo.py
-python examples/nano_codex/main.py
-python examples/nano_hermes/main.py
-python examples/nano_openclaw/main.py
-python examples/nano_loop/main.py --help
-```
-
-确定性 Smoke 入口不需要 API Key 或网络，每次运行分别保存敏感的完整 Report
-和内容最小化 Trace。NanoClaudeCode 还保留真实 Provider 驱动的 REPL。
-跨 Example 的 Matrix 与 Trace 比较直接使用内置的
-`python -m nanoharness.profiles matrix/compare` 命令；检查工具不再放入
-`examples/`。
-
----
-
-## 工具
-
-工具满足 `BaseToolRegistry` 接口，提供两个方法：`get_tool_schemas()` 和 `call(name, args)`。
-
-内置两种注册器：
-
-- **DictToolRegistry** — 通过 `@tool` 装饰器注册 Python 函数，JSON Schema 从类型提示自动推断。
-- **ScriptToolRegistry** — 自动发现目录中的 `.sh` 文件，参数通过 `@param` 注释头声明，以环境变量传递。
-
-注册器通过 `merge()` 组合。
-
-添加新工具无需修改 Python 代码——将带有正确头部的 Shell 脚本放入 `configs/scripts/` 即可自动可用。
-
----
-
-## 扩展
-
-内核定义接口，应用提供具体行为：
-
-**LLM** — 实现 `LLMProtocol`：
-```python
-def chat(self, messages, tools=None) -> LLMResponse: ...
-```
-
-**自定义组件** — 继承任意 `Base*` ABC，注入 `NanoEngine`。
-
-`examples/nano_claude_code/` 是完整 NanoClaudeCode 实现，其中组装了自定义 LLM 适配器、记忆策略、权限流水线、子 Agent 委派、技能加载和评估，且无需修改内核。
-
-`examples/nano_loop/` 提供外层 Loop 控制面：反复创建干净的 NanoEngine 运行、验证产物、持久化证据、执行预算策略，并在明确的人工 Gate 停止。
-
----
 
 ## 测试
 
+仓库当前包含 **1,012 个通过的测试**：
+
+| 测试集 | 数量 |
+|---|---:|
+| Kernel、Extensions、Profiles 与 Contract | 563 |
+| NanoClaudeCode | 151 |
+| NanoCodex | 96 |
+| NanoHermes | 86 |
+| NanoOpenClaw | 89 |
+| NanoLoop | 27 |
+
 ```bash
-# 内核、公共扩展、Profile 与 Example 契约测试（563 个）
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -q
 
-# NanoClaudeCode 应用层测试（151 个：109 UT + 42 ST）
-cd examples/nano_claude_code
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
-
-# NanoCodex 协议、工具、Host 与交付测试（96 个）
-cd ../nano_codex && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
-
-# NanoHermes 持久学习测试（86 个）
-cd ../nano_hermes && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
-
-# NanoOpenClaw Wakeup、路由、Turn、恢复与交付测试（89 个）
-cd ../nano_openclaw && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
-
-# NanoLoop 测试（27 个）
-cd ../nano_loop
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
+cd examples/nano_openclaw
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -q
 ```
 
-**共 1012 个测试。** 可复用 Extension 行为统一在根测试集验证，各 Example
-测试集中验证自己拥有的组合、策略与集成边界。内核测试只需要内核依赖与 pytest；
-真实 MCP stdio 测试使用 `mcp` 可选依赖。
-
----
+每个 Example 的 `tests/` 都可以独立运行，用于验证该应用自己的策略与集成边界。真实 MCP stdio 测试使用 `mcp` 可选依赖。
 
 ## 安全
 
-拥有工具访问权限的 Agent 可能造成实际损害。生产部署应实现权限门控、沙箱执行和 Prompt 注入防御。参见 Coding Agent 示例中的权限流水线参考实现。
+拥有工具访问权限的 Agent 可以修改文件、运行进程并对外通信。生产应用应组合最小权限工具、显式 Policy、Approval Gate、沙箱执行、Secret Redaction 和 Prompt Injection 防御。NanoHarness 提供边界，具体策略由应用负责。
 
----
+## 理论来源与引用
 
-## 致谢
-
-本项目的理论基础来自 [Agent Harness Survey](https://github.com/Gloriaameng/Awesome-Agent-Harness)。
-
----
-
-## 引用
+内核的六类关注点参考了 [Agent Harness Survey](https://github.com/Gloriaameng/Awesome-Agent-Harness)。使用框架时不需要采用其符号；这篇 Survey 更适合作为比较 Harness 架构的延伸阅读。
 
 ```bibtex
 @software{nanoharness2026,
-  title     = {NanoHarness: A Minimal Agent Harness Based on H=(E,T,C,S,L,V)},
+  title     = {NanoHarness: A Minimal and Composable Agent Harness Framework},
   author    = {Habit},
   year      = {2026},
   url       = {https://github.com/HabitGraylight/NanoHarness},
@@ -420,18 +247,14 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/ -v
 }
 ```
 
-理论基础：
-
 ```bibtex
 @article{meng2026agentharness,
-  title     = {Agent Harness for Large Language Model Agents: A Survey},
-  author    = {Meng, Qianyu and Wang, Yanan and Chen, Liyi and others},
-  year      = {2026},
-  url       = {https://www.preprints.org/manuscript/202604.0428/v2}
+  title  = {Agent Harness for Large Language Model Agents: A Survey},
+  author = {Meng, Qianyu and Wang, Yanan and Chen, Liyi and others},
+  year   = {2026},
+  url    = {https://www.preprints.org/manuscript/202604.0428/v2}
 }
 ```
-
----
 
 ## 许可证
 
