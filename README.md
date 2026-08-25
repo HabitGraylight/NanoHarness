@@ -42,11 +42,31 @@ python examples/nano_openclaw/main.py
 The kernel depends only on Pydantic and PyYAML. Provider and integration dependencies are optional:
 
 ```bash
-pip install -e ".[openai]"   # OpenAI-compatible providers
-pip install -e ".[mcp]"      # MCP stdio servers
+pip install -e ".[openai]"     # OpenAI-compatible providers
+pip install -e ".[orcarouter]" # OrcaRouter via the OpenAI SDK
+pip install -e ".[mcp]"        # MCP stdio servers
 ```
 
 The root `main.py` is a minimal provider-backed assembly example. Set `DEEPSEEK_API_KEY`, install the OpenAI extra, and run `python main.py` to try it.
+
+### OrcaRouter provider
+
+`OrcaRouterProvider` targets the official `https://api.orcarouter.ai/v1` endpoint, reads `ORCAROUTER_API_KEY`, and preserves the existing OpenAI-compatible text, tool-call, and token-usage mapping. Pass an explicit provider-prefixed model, `orcarouter/auto`, or an ordered fallback chain:
+
+```python
+from nanoharness.components import OrcaRouterProvider
+
+provider = OrcaRouterProvider(
+    "openai/gpt-4o-mini",
+    fallback_models=[
+        "anthropic/claude-haiku-4.5",
+        "google/gemini-2.5-pro",
+    ],
+)
+response = provider.chat([{"role": "user", "content": "Hello"}])
+```
+
+Use `extra_body` and `extra_headers` for OrcaRouter-specific routing, session, or firewall options. See the [official OrcaRouter documentation](https://docs.orcarouter.ai/zh/introduction) for supported models and request fields.
 
 ## Complete harness examples
 
@@ -209,11 +229,11 @@ tests/           # Kernel, Extension, Profile, and example contracts
 
 ## Testing
 
-The repository currently contains **1,012 passing tests**:
+The repository currently contains **1,026 passing tests**:
 
 | Suite | Tests |
 |---|---:|
-| Kernel, Extensions, Profiles, and contracts | 563 |
+| Kernel, Extensions, Profiles, and contracts | 577 |
 | NanoClaudeCode | 151 |
 | NanoCodex | 96 |
 | NanoHermes | 86 |

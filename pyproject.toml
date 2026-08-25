@@ -18,6 +18,7 @@ nanoharness = "nanoharness.profiles.cli:main"
 
 [project.optional-dependencies]
 openai = ["openai>=1.0"]
+orcarouter = ["openai>=1.0"]
 anthropic = ["anthropic>=0.20"]
 litellm = ["litellm>=1.0"]
 mcp = ["mcp>=1.0"]

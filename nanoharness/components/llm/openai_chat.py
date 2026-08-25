@@ -1,7 +1,7 @@
 """Optional OpenAI-compatible implementation of the public LLM protocol."""
 
 import json
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 from nanoharness.core.schema import LLMResponse, TokenUsage, ToolCall
 
@@ -15,6 +15,7 @@ class OpenAIChatProvider:
         *,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
+        request_options: Optional[Mapping[str, Any]] = None,
         client: Any = None,
     ):
         if not model.strip():
@@ -34,9 +35,15 @@ class OpenAIChatProvider:
                 kwargs["base_url"] = base_url
             client = OpenAI(**kwargs)
         self.client = client
+        self.request_options = dict(request_options or {})
+        reserved = {"model", "messages", "tools"} & self.request_options.keys()
+        if reserved:
+            names = ", ".join(sorted(reserved))
+            raise ValueError(f"request_options cannot override {names}")
 
     def chat(self, messages, tools=None) -> LLMResponse:
-        arguments = {"model": self.model, "messages": messages}
+        arguments = dict(self.request_options)
+        arguments.update({"model": self.model, "messages": messages})
         if tools:
             arguments["tools"] = tools
         response = self.client.chat.completions.create(**arguments)

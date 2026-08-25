@@ -42,11 +42,31 @@ python examples/nano_openclaw/main.py
 内核只依赖 Pydantic 和 PyYAML。Provider 与外部集成都采用可选依赖：
 
 ```bash
-pip install -e ".[openai]"   # OpenAI-compatible Provider
-pip install -e ".[mcp]"      # MCP stdio Server
+pip install -e ".[openai]"     # OpenAI-compatible Provider
+pip install -e ".[orcarouter]" # 通过 OpenAI SDK 使用 OrcaRouter
+pip install -e ".[mcp]"        # MCP stdio Server
 ```
 
 根目录 `main.py` 是最小的真实 Provider 组装示例。安装 OpenAI 可选依赖、设置 `DEEPSEEK_API_KEY` 后，可以运行 `python main.py`。
+
+### OrcaRouter Provider
+
+`OrcaRouterProvider` 默认连接官方 `https://api.orcarouter.ai/v1` 端点，读取 `ORCAROUTER_API_KEY`，并复用现有 OpenAI-compatible 文本、工具调用和 TokenUsage 映射。可以传入带服务商前缀的明确模型、`orcarouter/auto`，或者有序回退链：
+
+```python
+from nanoharness.components import OrcaRouterProvider
+
+provider = OrcaRouterProvider(
+    "openai/gpt-4o-mini",
+    fallback_models=[
+        "anthropic/claude-haiku-4.5",
+        "google/gemini-2.5-pro",
+    ],
+)
+response = provider.chat([{"role": "user", "content": "你好"}])
+```
+
+OrcaRouter 特有的路由、会话或防火墙参数可以通过 `extra_body` 和 `extra_headers` 显式传入。模型列表和请求字段以 [OrcaRouter 官方文档](https://docs.orcarouter.ai/zh/introduction)为准。
 
 ## 完整 Harness 示例
 
@@ -209,11 +229,11 @@ tests/           # Kernel、Extension、Profile 与 Example Contract
 
 ## 测试
 
-仓库当前包含 **1,012 个通过的测试**：
+仓库当前包含 **1,026 个通过的测试**：
 
 | 测试集 | 数量 |
 |---|---:|
-| Kernel、Extensions、Profiles 与 Contract | 563 |
+| Kernel、Extensions、Profiles 与 Contract | 577 |
 | NanoClaudeCode | 151 |
 | NanoCodex | 96 |
 | NanoHermes | 86 |

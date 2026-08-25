@@ -43,6 +43,27 @@ def test_openai_chat_provider_maps_text_and_omits_empty_tools():
     assert "tools" not in client.completions.calls[0]
 
 
+def test_openai_chat_provider_passes_safe_request_options():
+    client = _client("hello")
+    provider = OpenAIChatProvider(
+        "test",
+        client=client,
+        request_options={"extra_body": {"route": "custom"}},
+    )
+    provider.chat([{"role": "user"}])
+    assert client.completions.calls[0]["extra_body"] == {"route": "custom"}
+
+
+@pytest.mark.parametrize("field", ["model", "messages", "tools"])
+def test_openai_chat_provider_rejects_reserved_request_options(field):
+    with pytest.raises(ValueError, match="cannot override"):
+        OpenAIChatProvider(
+            "test",
+            client=_client(),
+            request_options={field: "override"},
+        )
+
+
 def test_openai_chat_provider_maps_tool_calls_and_usage():
     call = SimpleNamespace(
         id="call_1",

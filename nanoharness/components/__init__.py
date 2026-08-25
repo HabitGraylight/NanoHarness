@@ -1,7 +1,7 @@
 from nanoharness.components.context.simple_context import SimpleContextManager
 from nanoharness.components.evaluator.trace_evaluator import TraceEvaluator
-from nanoharness.components.hooks.simple_hooks import SimpleHookManager
-from nanoharness.components.llm import OpenAIChatProvider
+from nanoharness.components.hooks.simple_hooks import SimpleHookManage
+from nanoharness.components.llm import OpenAIChatProvider, OrcaRouterProvide
 from nanoharness.components.lifecycle import (
     AllowAllPolicy,
     CallbackApprovalBroker,
@@ -26,6 +26,7 @@ __all__ = [
     "JsonStateStore",
     "JsonlEventSink",
     "OpenAIChatProvider",
+    "OrcaRouterProvider",
     "RedactingEventSink",
     "RegistryToolExecutor",
     "ScriptToolRegistry",
