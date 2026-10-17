@@ -44,7 +44,7 @@ The kernel depends only on Pydantic and PyYAML. Provider and integration depende
 ```bash
 pip install -e ".[openai]"     # OpenAI-compatible providers
 pip install -e ".[orcarouter]" # OrcaRouter via the OpenAI SDK
-pip install -e ".[mcp]"        # MCP stdio servers
+pip install -e ".[mcp]"        # MCP stdio and Streamable HTTP servers
 ```
 
 The root `main.py` is a minimal provider-backed assembly example. Set `DEEPSEEK_API_KEY`, install the OpenAI extra, and run `python main.py` to try it.
@@ -160,7 +160,7 @@ Extensions install tools and services into an explicit `ExtensionContext`. Each 
 |---|---|
 | Memory | Markdown-backed save, recall, and listing |
 | Skills | Metadata discovery and on-demand instruction loading |
-| MCP | Official SDK stdio sessions and dynamic tool discovery |
+| MCP | Official SDK stdio/Streamable HTTP sessions and dynamic tool discovery |
 | Background | Managed shell processes and completion notifications |
 | Channels | Durable transport-neutral Inbox/Outbox, approval, retry, and adapters |
 | Scheduler | Persistent cron/delay triggers and fire-time notifications |
@@ -181,6 +181,46 @@ memory = context.services["memory"]
 print(extensions.inspect())
 extensions.close()
 ```
+
+### Web search with Parallel
+
+Install `pip install -e ".[mcp]"`, then enable the MCP extension in your harness:
+
+```python
+from nanoharness import DictToolRegistry, ExtensionContext, ExtensionManager
+from nanoharness.extensions.mcp import MCPExtension
+
+context = ExtensionContext(tools=DictToolRegistry())
+with ExtensionManager(context) as extensions:
+    extensions.install(MCPExtension())
+    # Pass context.tools to NanoEngine to expose the discovered tools to its model.
+    result = context.tools.call("mcp__parallel__web_search", {
+        "objective": "Find Python's current stable release",
+        "search_queries": ["Python current stable release"],
+    })
+    print(result)
+```
+
+An enabled, unconfigured MCP extension now uses
+[Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp)
+at `https://search.parallel.ai/mcp`. It provides `web_search` in Fast mode and
+`web_fetch` for HTTP(S) pages without an account or API key. Free access has usage
+limits; connection and tool failures are surfaced through the existing MCP failure
+policy. `read_timeout_seconds` bounds MCP requests. Engine permissions and
+cooperative cancellation at step boundaries still apply.
+
+Profiles can enable the same default with `extensions: [{name: mcp.stdio}]`.
+The extension keeps its existing `mcp.stdio` identifier for compatibility.
+An explicit `servers` list, including `servers: []`, or `config_path` replaces the
+default, even when the file is missing or empty. A profile with `enabled: false`
+does not connect. Configured servers never fall back to Parallel on failure.
+
+For an explicit remote server, use `{"name": "parallel", "transport":
+"streamable_http", "url": "https://search.parallel.ai/mcp"}` in `servers`.
+Optional `headers` are passed as configured and redacted from inspection receipts;
+credentials are never read from the environment for HTTP connections. Existing
+stdio server definitions continue to work. Use `extensions.close()` when managing
+the extension lifecycle without a context manager.
 
 ## Declarative Profiles and inspection
 

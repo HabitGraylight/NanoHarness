@@ -12,6 +12,7 @@ from nanoharness.extensions.mcp.models import (
     MCPServerConfig,
     MCPServerFile,
     PluginLoader,
+    parallel_search_server,
 )
 
 __all__ = [
@@ -23,6 +24,7 @@ __all__ = [
     "MCPServerConfig",
     "MCPServerFile",
     "PluginLoader",
+    "parallel_search_server",
     "install_mcp_tools",
     "mcp_handler",
     "mcp_tool_name",

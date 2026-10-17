@@ -8,7 +8,7 @@ openai>=1.0
 # litellm>=1.0
 
 # MCP integration (uncomment to enable)
-mcp>=1.0
+mcp>=1.10,<2
 
 # Development
 pytest>=7.0

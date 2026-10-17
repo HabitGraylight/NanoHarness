@@ -495,7 +495,7 @@ _SENSITIVE_KEYS = {
 
 def _redact(value: Any, *, parent_key: str = "") -> Any:
     if isinstance(value, dict):
-        if parent_key.lower() == "env":
+        if parent_key.lower() in ("env", "headers"):
             return {str(key): "***" for key in value}
         result = {}
         for key, item in value.items():

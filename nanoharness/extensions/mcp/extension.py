@@ -1,10 +1,10 @@
-"""Reusable MCP stdio extension with dynamic schema-first tools."""
+"""Reusable MCP extension with dynamic schema-first tools."""
 
 import warnings
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from nanoharness.extensions.base import (
     BaseExtension,
@@ -13,13 +13,15 @@ from nanoharness.extensions.base import (
     ExtensionManifest,
 )
 from nanoharness.extensions.mcp.client import MCPClient
-from nanoharness.extensions.mcp.models import MCPServerConfig, PluginLoader
+from nanoharness.extensions.mcp.models import (
+    MCPServerConfig, PluginLoader, parallel_search_server,
+)
 
 
 class MCPExtensionConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    config_path: Optional[str] = None
+    config_path: Optional[str] = Field(default=None, min_length=1)
     servers: List[MCPServerConfig] = Field(default_factory=list)
     service_name: str = "mcp"
     tool_namespace: str = "mcp"
@@ -27,6 +29,16 @@ class MCPExtensionConfig(BaseModel):
     read_timeout_seconds: float = Field(default=15.0, gt=0, le=300)
     client_name: str = "nanoharness"
     client_version: str = "0.1.0"
+
+    @model_validator(mode="before")
+    @classmethod
+    def default_search(cls, value):
+        # An explicit list (even []) or config file is authoritative. Never
+        # append a fallback to a configured server or a failed connection.
+        if (isinstance(value, dict) and "servers" not in value
+                and value.get("config_path") is None):
+            return {**value, "servers": [parallel_search_server()]}
+        return value
 
 
 @dataclass
@@ -92,6 +104,9 @@ def _connect_and_discover(
             args=server.args,
             env=server.env,
             cwd=server.cwd,
+            transport=server.transport,
+            url=server.url,
+            headers=server.headers,
             read_timeout_seconds=read_timeout_seconds,
             client_name=client_name,
             client_version=client_version,
@@ -209,6 +224,7 @@ def _redacted_config(config: MCPExtensionConfig) -> Dict[str, Any]:
     receipt = config.model_dump(mode="json")
     for server in receipt["servers"]:
         server["env"] = {key: "***" for key in server["env"]}
+        server["headers"] = {key: "***" for key in server["headers"]}
     return receipt
 
 
@@ -216,7 +232,7 @@ class MCPExtension(BaseExtension):
     manifest = ExtensionManifest(
         name="mcp.stdio",
         version="1.0.0",
-        description="External MCP servers over stdio with dynamic tool discovery.",
+        description="MCP tools over stdio or Streamable HTTP; unconfigured search uses Parallel.",
         provides=["mcp.clients", "tools.mcp"],
     )
     config_model = MCPExtensionConfig
@@ -258,8 +274,12 @@ class MCPExtension(BaseExtension):
                 "connected_servers": pool.connected_names,
                 "failed_servers": sorted(pool.failures),
                 "tool_count": len(tool_names),
-                "transport": "stdio",
-                "optional_dependency": "mcp>=1.0",
+                "transport": (
+                    servers[0].transport
+                    if servers and len({server.transport for server in servers}) == 1
+                    else "mixed" if servers else "stdio"
+                ),
+                "optional_dependency": "mcp>=1.10,<2",
             },
         )
 

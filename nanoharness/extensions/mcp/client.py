@@ -1,10 +1,11 @@
-"""Synchronous white-box client over the official async MCP stdio SDK."""
+"""Synchronous white-box client over the official async MCP SDK."""
 
 import asyncio
 import concurrent.futures
 import json
 import os
 import threading
+from contextlib import asynccontextmanager
 from datetime import timedelta
 from typing import Any, Dict, List, Optional
 
@@ -22,14 +23,14 @@ def _sdk_types():
         from mcp.types import Implementation
     except ImportError as error:
         raise MCPDependencyError(
-            "MCP stdio support requires the optional dependency; "
+            "MCP support requires the optional dependency; "
             "install it with `pip install 'nanoharness[mcp]'`."
         ) from error
     return ClientSession, StdioServerParameters, stdio_client, Implementation
 
 
 class MCPClient:
-    """Own one MCP subprocess and expose a synchronous tool API.
+    """Own one MCP connection and expose a synchronous tool API.
 
     The official SDK is asynchronous. A dedicated thread owns both its event
     loop and async context managers, while Harness tool calls submit work to
@@ -40,11 +41,14 @@ class MCPClient:
     def __init__(
         self,
         name: str,
-        command: str,
+        command: Optional[str] = None,
         args: Optional[List[str]] = None,
         env: Optional[Dict[str, str]] = None,
         cwd: Optional[str] = None,
         *,
+        transport: str = "stdio",
+        url: Optional[str] = None,
+        headers: Optional[Dict[str, str]] = None,
         read_timeout_seconds: float = 15.0,
         client_name: str = "nanoharness",
         client_version: str = "0.1.0",
@@ -56,6 +60,9 @@ class MCPClient:
             args=args or [],
             env=env or {},
             cwd=cwd,
+            transport=transport,
+            url=url,
+            headers=headers or {},
         )
         self._read_timeout_seconds = read_timeout_seconds
         self._client_name = client_name
@@ -151,10 +158,37 @@ class MCPClient:
         finally:
             self._session = None
 
-    async def _serve(self) -> None:
-        ClientSession, StdioServerParameters, stdio_client, Implementation = _sdk_types()
-        self._loop = asyncio.get_running_loop()
-        self._requests = asyncio.Queue()
+    @asynccontextmanager
+    async def _transport(self):
+        if self._server.transport == "streamable_http":
+            try:
+                from mcp.client.streamable_http import streamablehttp_client
+            except ImportError as error:
+                raise MCPDependencyError(
+                    "Streamable HTTP requires mcp>=1.10; "
+                    "install `pip install 'nanoharness[mcp]'`."
+                ) from error
+            headers = {"User-Agent": (
+                f"{self._client_name}/{self._client_version} "
+                "(+https://github.com/HabitGraylight/NanoHarness)"
+            )}
+            # HTTP header names are case-insensitive. Explicit headers win.
+            explicit_names = {name.lower() for name in self._server.headers}
+            headers = {
+                key: value for key, value in headers.items()
+                if key.lower() not in explicit_names
+            }
+            headers.update(self._server.headers)
+            async with streamablehttp_client(
+                self._server.url,
+                headers=headers,
+                timeout=timedelta(seconds=self._read_timeout_seconds),
+                sse_read_timeout=timedelta(seconds=self._read_timeout_seconds),
+            ) as (read_stream, write_stream, _):
+                yield read_stream, write_stream
+            return
+
+        _, StdioServerParameters, stdio_client, _ = _sdk_types()
         environment = None
         if self._server.env:
             environment = dict(os.environ)
@@ -165,13 +199,20 @@ class MCPClient:
             env=environment,
             cwd=self._server.cwd,
         )
+        async with stdio_client(parameters) as streams:
+            yield streams
+
+    async def _serve(self) -> None:
+        ClientSession, _, _, Implementation = _sdk_types()
+        self._loop = asyncio.get_running_loop()
+        self._requests = asyncio.Queue()
         timeout = timedelta(seconds=self._read_timeout_seconds)
         client_info = Implementation(
             name=self._client_name,
             version=self._client_version,
         )
         try:
-            async with stdio_client(parameters) as (read_stream, write_stream):
+            async with self._transport() as (read_stream, write_stream):
                 async with ClientSession(
                     read_stream,
                     write_stream,
