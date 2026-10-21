@@ -162,7 +162,7 @@ class MCPClient:
     async def _transport(self):
         if self._server.transport == "streamable_http":
             try:
-                from mcp.client.streamable_http import streamablehttp_client
+                from mcp.client import streamable_http
             except ImportError as error:
                 raise MCPDependencyError(
                     "Streamable HTTP requires mcp>=1.10; "
@@ -179,13 +179,30 @@ class MCPClient:
                 if key.lower() not in explicit_names
             }
             headers.update(self._server.headers)
-            async with streamablehttp_client(
-                self._server.url,
-                headers=headers,
-                timeout=timedelta(seconds=self._read_timeout_seconds),
-                sse_read_timeout=timedelta(seconds=self._read_timeout_seconds),
-            ) as (read_stream, write_stream, _):
-                yield read_stream, write_stream
+            modern_client = getattr(streamable_http, "streamable_http_client", None)
+            if modern_client is not None:
+                import httpx
+
+                async with httpx.AsyncClient(
+                    headers=headers,
+                    timeout=httpx.Timeout(self._read_timeout_seconds),
+                    follow_redirects=True,
+                    trust_env=False,
+                ) as http_client:
+                    async with modern_client(
+                        self._server.url,
+                        http_client=http_client,
+                    ) as (read_stream, write_stream, _):
+                        yield read_stream, write_stream
+            else:
+                legacy_client = streamable_http.streamablehttp_client
+                async with legacy_client(
+                    self._server.url,
+                    headers=headers,
+                    timeout=timedelta(seconds=self._read_timeout_seconds),
+                    sse_read_timeout=timedelta(seconds=self._read_timeout_seconds),
+                ) as (read_stream, write_stream, _):
+                    yield read_stream, write_stream
             return
 
         _, StdioServerParameters, stdio_client, _ = _sdk_types()

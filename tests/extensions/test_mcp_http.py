@@ -91,6 +91,13 @@ def calls(requests):
             if r.method == "POST" and json.loads(r.content).get("method") == "tools/call"]
 
 
+def parallel_config(**overrides):
+    return {
+        "servers": [parallel_search_server().model_dump(mode="json")],
+        **overrides,
+    }
+
+
 class SearchModel:
     """Script model choices, but assert it consumes the actual tool observations."""
 
@@ -117,6 +124,8 @@ class SearchModel:
 
 
 def build_harness(tmp_path, *, config=None, enabled=True, model=None):
+    if config is None:
+        config = parallel_config()
     context = ExtensionContext(tools=DictToolRegistry())
     context.services.update({
         "llm": model or SearchModel(),
@@ -128,12 +137,12 @@ def build_harness(tmp_path, *, config=None, enabled=True, model=None):
     spec = HarnessSpec.model_validate({
         "name": "search-agent", "engine": {},
         "host": {"services": list(context.services)},
-        "extensions": [{"name": "mcp.stdio", "enabled": enabled, "config": config or {}}],
+        "extensions": [{"name": "mcp.stdio", "enabled": enabled, "config": config}],
     })
     return HarnessBuilder().build(spec, context=context)
 
 
-def test_unconfigured_profile_search_fetch_and_model_consumption(tmp_path, http_peer, monkeypatch):
+def test_explicit_parallel_search_fetch_and_model_consumption(tmp_path, http_peer, monkeypatch):
     requests, _ = http_peer
     monkeypatch.setenv("PARALLEL_API_KEY", "ambient-key-must-not-be-used")
     monkeypatch.setenv("YOU_API_KEY", "existing-other-provider-key")
@@ -154,8 +163,8 @@ def test_unconfigured_profile_search_fetch_and_model_consumption(tmp_path, http_
     assert not pool.clients[0].connected
 
 
-@pytest.mark.parametrize("config", [{"servers": []}, {"config_path": "missing.json"}])
-def test_explicit_empty_or_missing_file_disables_default(tmp_path, http_peer, config):
+@pytest.mark.parametrize("config", [{}, {"servers": []}, {"config_path": "missing.json"}])
+def test_empty_or_missing_configuration_stays_offline(tmp_path, http_peer, config):
     requests, _ = http_peer
     build = build_harness(tmp_path, config=config)
     try:
@@ -190,7 +199,10 @@ def test_empty_saved_file_disables_default(tmp_path, http_peer):
 @pytest.mark.parametrize("from_file", [False, True])
 def test_explicit_url_credentials_and_inspection_redaction(tmp_path, http_peer, from_file):
     requests, _ = http_peer
-    url = "https://search.example.org/mcp?mode=chosen"
+    url = (
+        "https://search.example.org/mcp?mode=chosen&api_key=query-secret"
+        "&X-Amz-Signature=signed-secret"
+    )
     servers = [{"name": "chosen", "transport": "streamable_http", "url": url,
                 "headers": {"Authorization": "Bearer configured-key", "X-Custom": "private-value"}}]
     config = {"servers": servers}
@@ -207,6 +219,8 @@ def test_explicit_url_credentials_and_inspection_redaction(tmp_path, http_peer, 
         inspection = json.dumps(build.inspect())
         assert "configured-key" not in inspection
         assert "private-value" not in inspection
+        assert "query-secret" not in inspection
+        assert "signed-secret" not in inspection
     finally:
         build.close()
 
@@ -250,7 +264,10 @@ def test_tool_errors_reach_engine_observation(tmp_path, http_peer):
 
 def test_read_timeout_reaches_caller_and_connection_closes(tmp_path, http_peer):
     requests, state = http_peer
-    build = build_harness(tmp_path, config={"read_timeout_seconds": 0.05})
+    build = build_harness(
+        tmp_path,
+        config=parallel_config(read_timeout_seconds=0.05),
+    )
     state["slow"] = True
     try:
         with pytest.raises(McpError, match="[Tt]imed out"):
@@ -312,7 +329,10 @@ def test_invalid_transport_configuration_is_rejected(server):
         MCPServerConfig.model_validate(server)
 
 
-def test_default_config_is_stable_across_serialization():
+def test_empty_default_and_parallel_helper_are_stable_across_serialization():
     config = MCPExtensionConfig()
-    assert config.servers == [parallel_search_server()]
+    assert config.servers == []
     assert MCPExtensionConfig.model_validate(config.model_dump()) == config
+    assert MCPServerConfig.model_validate(
+        parallel_search_server().model_dump()
+    ) == parallel_search_server()

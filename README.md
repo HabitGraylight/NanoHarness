@@ -188,11 +188,11 @@ Install `pip install -e ".[mcp]"`, then enable the MCP extension in your harness
 
 ```python
 from nanoharness import DictToolRegistry, ExtensionContext, ExtensionManager
-from nanoharness.extensions.mcp import MCPExtension
+from nanoharness.extensions.mcp import MCPExtension, parallel_search_server
 
 context = ExtensionContext(tools=DictToolRegistry())
 with ExtensionManager(context) as extensions:
-    extensions.install(MCPExtension())
+    extensions.install(MCPExtension(), {"servers": [parallel_search_server()]})
     # Pass context.tools to NanoEngine to expose the discovered tools to its model.
     result = context.tools.call("mcp__parallel__web_search", {
         "objective": "Find Python's current stable release",
@@ -201,26 +201,11 @@ with ExtensionManager(context) as extensions:
     print(result)
 ```
 
-An enabled, unconfigured MCP extension now uses
-[Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp)
-at `https://search.parallel.ai/mcp`. It provides `web_search` in Fast mode and
-`web_fetch` for HTTP(S) pages without an account or API key. Free access has usage
-limits; connection and tool failures are surfaced through the existing MCP failure
-policy. `read_timeout_seconds` bounds MCP requests. Engine permissions and
-cooperative cancellation at step boundaries still apply.
+[Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp) provides `web_search` in Fast mode and `web_fetch` for HTTP(S) pages at `https://search.parallel.ai/mcp` without an account or API key. It is opt-in: an unconfigured MCP extension has no servers and makes no network connection.
 
-Profiles can enable the same default with `extensions: [{name: mcp.stdio}]`.
-The extension keeps its existing `mcp.stdio` identifier for compatibility.
-An explicit `servers` list, including `servers: []`, or `config_path` replaces the
-default, even when the file is missing or empty. A profile with `enabled: false`
-does not connect. Configured servers never fall back to Parallel on failure.
+Profiles can enable Parallel with `servers: [{name: parallel, transport: streamable_http, url: https://search.parallel.ai/mcp}]`. The extension keeps its existing `mcp.stdio` identifier for compatibility, now with both stdio and Streamable HTTP transports. An empty `servers` list, a missing or empty configuration file, or `enabled: false` remains offline, and configured servers never fall back to Parallel on failure.
 
-For an explicit remote server, use `{"name": "parallel", "transport":
-"streamable_http", "url": "https://search.parallel.ai/mcp"}` in `servers`.
-Optional `headers` are passed as configured and redacted from inspection receipts;
-credentials are never read from the environment for HTTP connections. Existing
-stdio server definitions continue to work. Use `extensions.close()` when managing
-the extension lifecycle without a context manager.
+Optional `headers` are passed as configured and redacted from inspection receipts. Credential-like URL query values are also redacted, and HTTP connections never read credentials from the environment. Free access has usage limits; connection and tool failures follow the existing MCP failure policy. `read_timeout_seconds` bounds MCP requests, while engine permissions and cooperative cancellation at step boundaries still apply. Use `extensions.close()` when managing the extension lifecycle without a context manager.
 
 ## Declarative Profiles and inspection
 
@@ -269,11 +254,11 @@ tests/           # Kernel, Extension, Profile, and example contracts
 
 ## Testing
 
-The repository currently contains **1,026 passing tests**:
+The repository currently contains **1,046 passing tests**:
 
 | Suite | Tests |
 |---|---:|
-| Kernel, Extensions, Profiles, and contracts | 577 |
+| Kernel, Extensions, Profiles, and contracts | 597 |
 | NanoClaudeCode | 151 |
 | NanoCodex | 96 |
 | NanoHermes | 86 |

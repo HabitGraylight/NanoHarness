@@ -184,27 +184,11 @@ extensions.close()
 
 ### 使用 Parallel 搜索网页
 
-安装 `pip install -e ".[mcp]"` 后，在 Harness 中启用 `MCPExtension`。
-未提供 `servers` 或 `config_path` 的已启用 MCP Extension 默认连接
-[Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp)，
-地址为 `https://search.parallel.ai/mcp`，无需账号或 API Key。
-`mcp__parallel__web_search` 使用 Fast 模式搜索，
-`mcp__parallel__web_fetch` 提取 HTTP(S) 网页内容。将 ExtensionContext 的
-`tools` 传给 NanoEngine 后，模型即可通过现有工具调度路径使用它们。
-免费访问有用量限制；连接与工具错误沿用 MCP 的失败处理策略。
+安装 `pip install -e ".[mcp]"` 后，可以显式配置 [Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp)。它在 `https://search.parallel.ai/mcp` 提供 Fast 模式的 `web_search` 和用于 HTTP(S) 页面的 `web_fetch`，无需账号或 API Key。该能力不会自动启用：未配置服务器的 MCP Extension 不会建立网络连接。
 
-Profile 可以使用 `extensions: [{name: mcp.stdio}]` 启用默认配置。
-`mcp.stdio` 标识保留兼容性，现在同时支持 stdio 和 Streamable HTTP。
-显式 `servers` 列表（包括 `servers: []`）或 `config_path` 会替代默认配置，
-文件不存在或为空时也不会自动回退。`enabled: false` 不会连接服务器。
-显式服务器连接失败不会回退到 Parallel。
+Profile 可以使用 `servers: [{name: parallel, transport: streamable_http, url: https://search.parallel.ai/mcp}]` 启用 Parallel。`mcp.stdio` 标识为兼容已有配置而保留，现在同时支持 stdio 和 Streamable HTTP。空 `servers` 列表、缺失或为空的配置文件以及 `enabled: false` 都保持离线；显式服务器连接失败也不会回退到 Parallel。
 
-远程服务器配置格式为 `{"name": "parallel", "transport": "streamable_http",
-"url": "https://search.parallel.ai/mcp"}`，可选 `headers` 会原样传递并在
-检查回执中脱敏。HTTP 连接不会从环境变量读取凭据。
-`read_timeout_seconds` 限制 MCP 请求等待时间；Engine 权限与 Step 边界的
-协作式取消机制保持有效。使用完毕后调用 `extensions.close()`，或使用
-ExtensionManager 的上下文管理器释放连接。英文说明提供完整调用示例。
+可选 `headers` 会原样传递并在检查回执中脱敏，URL 查询参数中类似凭据的值也会脱敏，HTTP 连接不会从环境变量读取凭据。免费访问有用量限制；连接与工具错误沿用 MCP 的失败处理策略。`read_timeout_seconds` 限制请求等待时间，Engine 权限与 Step 边界的协作式取消机制保持有效。使用完毕后调用 `extensions.close()`，或使用 ExtensionManager 上下文管理器释放连接。英文说明提供完整调用示例。
 
 ## 声明式 Profile 与检查工具
 
@@ -253,11 +237,11 @@ tests/           # Kernel、Extension、Profile 与 Example Contract
 
 ## 测试
 
-仓库当前包含 **1,026 个通过的测试**：
+仓库当前包含 **1,046 个通过的测试**：
 
 | 测试集 | 数量 |
 |---|---:|
-| Kernel、Extensions、Profiles 与 Contract | 577 |
+| Kernel、Extensions、Profiles 与 Contract | 597 |
 | NanoClaudeCode | 151 |
 | NanoCodex | 96 |
 | NanoHermes | 86 |

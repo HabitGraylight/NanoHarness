@@ -24,6 +24,7 @@ from nanoharness.profiles.models import (
     HarnessValidation,
     PlannedExtension,
 )
+from nanoharness.utils.redaction import redact_url_query
 
 
 class HarnessSpecError(ValueError):
@@ -509,4 +510,6 @@ def _redact(value: Any, *, parent_key: str = "") -> Any:
         return result
     if isinstance(value, list):
         return [_redact(item, parent_key=parent_key) for item in value]
+    if isinstance(value, str) and parent_key.lower() == "url":
+        return redact_url_query(value)
     return value

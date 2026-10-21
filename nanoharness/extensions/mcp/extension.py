@@ -4,7 +4,7 @@ import warnings
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from nanoharness.extensions.base import (
     BaseExtension,
@@ -13,9 +13,8 @@ from nanoharness.extensions.base import (
     ExtensionManifest,
 )
 from nanoharness.extensions.mcp.client import MCPClient
-from nanoharness.extensions.mcp.models import (
-    MCPServerConfig, PluginLoader, parallel_search_server,
-)
+from nanoharness.extensions.mcp.models import MCPServerConfig, PluginLoader
+from nanoharness.utils.redaction import redact_url_query
 
 
 class MCPExtensionConfig(BaseModel):
@@ -29,17 +28,6 @@ class MCPExtensionConfig(BaseModel):
     read_timeout_seconds: float = Field(default=15.0, gt=0, le=300)
     client_name: str = "nanoharness"
     client_version: str = "0.1.0"
-
-    @model_validator(mode="before")
-    @classmethod
-    def default_search(cls, value):
-        # An explicit list (even []) or config file is authoritative. Never
-        # append a fallback to a configured server or a failed connection.
-        if (isinstance(value, dict) and "servers" not in value
-                and value.get("config_path") is None):
-            return {**value, "servers": [parallel_search_server()]}
-        return value
-
 
 @dataclass
 class MCPClientPool:
@@ -225,6 +213,7 @@ def _redacted_config(config: MCPExtensionConfig) -> Dict[str, Any]:
     for server in receipt["servers"]:
         server["env"] = {key: "***" for key in server["env"]}
         server["headers"] = {key: "***" for key in server["headers"]}
+        server["url"] = redact_url_query(server["url"])
     return receipt
 
 
@@ -232,7 +221,7 @@ class MCPExtension(BaseExtension):
     manifest = ExtensionManifest(
         name="mcp.stdio",
         version="1.0.0",
-        description="MCP tools over stdio or Streamable HTTP; unconfigured search uses Parallel.",
+        description="MCP tools over stdio or Streamable HTTP.",
         provides=["mcp.clients", "tools.mcp"],
     )
     config_model = MCPExtensionConfig
