@@ -21,7 +21,7 @@ openai = ["openai>=1.0"]
 orcarouter = ["openai>=1.0"]
 anthropic = ["anthropic>=0.20"]
 litellm = ["litellm>=1.0"]
-mcp = ["mcp>=1.0"]
+mcp = ["mcp>=1.10,<2"]
 all-providers = ["nanoharness[openai,anthropic,litellm,mcp]"]
 dev = [
     "pytest>=7.0",

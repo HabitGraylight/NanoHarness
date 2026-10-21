@@ -253,6 +253,13 @@ def test_explain_is_white_box_and_redacts_nested_secrets():
                     "name": "demo",
                     "command": "server",
                     "env": {"API_TOKEN": "secret-value"},
+                }, {
+                    "name": "remote",
+                    "transport": "streamable_http",
+                    "url": (
+                        "https://example.test/mcp?mode=fast&api_key=url-secret"
+                        "&X-Amz-Signature=signed-secret"
+                    ),
                 }],
             },
         }],
@@ -264,7 +271,13 @@ def test_explain_is_white_box_and_redacts_nested_secrets():
     assert explanation.valid
     assert extension.provides == ["mcp.clients", "tools.mcp"]
     assert extension.config["servers"][0]["env"] == {"API_TOKEN": "***"}
+    redacted_url = extension.config["servers"][1]["url"]
+    assert "mode=fast" in redacted_url
+    assert "api_key=***" in redacted_url
+    assert "X-Amz-Signature=***" in redacted_url
     assert "secret-value" not in explanation.model_dump_json()
+    assert "url-secret" not in explanation.model_dump_json()
+    assert "signed-secret" not in explanation.model_dump_json()
     assert "properties" in extension.config_schema
 
 

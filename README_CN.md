@@ -44,7 +44,7 @@ python examples/nano_openclaw/main.py
 ```bash
 pip install -e ".[openai]"     # OpenAI-compatible Provider
 pip install -e ".[orcarouter]" # 通过 OpenAI SDK 使用 OrcaRouter
-pip install -e ".[mcp]"        # MCP stdio Server
+pip install -e ".[mcp]"        # MCP stdio 与 Streamable HTTP 服务
 ```
 
 根目录 `main.py` 是最小的真实 Provider 组装示例。安装 OpenAI 可选依赖、设置 `DEEPSEEK_API_KEY` 后，可以运行 `python main.py`。
@@ -160,7 +160,7 @@ Extension 把工具和服务安装到明确的 `ExtensionContext`。每个 Exten
 |---|---|
 | Memory | 基于 Markdown 的保存、回忆与列表 |
 | Skills | Metadata 发现与按需指令加载 |
-| MCP | 官方 SDK stdio Session 与动态工具发现 |
+| MCP | 官方 SDK stdio/Streamable HTTP Session 与动态工具发现 |
 | Background | 托管 Shell 进程与完成通知 |
 | Channels | 与传输无关的持久 Inbox/Outbox、审批、重试与 Adapter |
 | Scheduler | 持久 Cron/Delay 触发和触发时通知 |
@@ -181,6 +181,14 @@ memory = context.services["memory"]
 print(extensions.inspect())
 extensions.close()
 ```
+
+### 使用 Parallel 搜索网页
+
+安装 `pip install -e ".[mcp]"` 后，可以显式配置 [Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp)。它在 `https://search.parallel.ai/mcp` 提供 Fast 模式的 `web_search` 和用于 HTTP(S) 页面的 `web_fetch`，无需账号或 API Key。该能力不会自动启用：未配置服务器的 MCP Extension 不会建立网络连接。
+
+Profile 可以使用 `servers: [{name: parallel, transport: streamable_http, url: https://search.parallel.ai/mcp}]` 启用 Parallel。`mcp.stdio` 标识为兼容已有配置而保留，现在同时支持 stdio 和 Streamable HTTP。空 `servers` 列表、缺失或为空的配置文件以及 `enabled: false` 都保持离线；显式服务器连接失败也不会回退到 Parallel。
+
+可选 `headers` 会原样传递并在检查回执中脱敏，URL 查询参数中类似凭据的值也会脱敏，HTTP 连接不会从环境变量读取凭据。免费访问有用量限制；连接与工具错误沿用 MCP 的失败处理策略。`read_timeout_seconds` 限制请求等待时间，Engine 权限与 Step 边界的协作式取消机制保持有效。使用完毕后调用 `extensions.close()`，或使用 ExtensionManager 上下文管理器释放连接。英文说明提供完整调用示例。
 
 ## 声明式 Profile 与检查工具
 
@@ -229,11 +237,11 @@ tests/           # Kernel、Extension、Profile 与 Example Contract
 
 ## 测试
 
-仓库当前包含 **1,026 个通过的测试**：
+仓库当前包含 **1,046 个通过的测试**：
 
 | 测试集 | 数量 |
 |---|---:|
-| Kernel、Extensions、Profiles 与 Contract | 577 |
+| Kernel、Extensions、Profiles 与 Contract | 597 |
 | NanoClaudeCode | 151 |
 | NanoCodex | 96 |
 | NanoHermes | 86 |
