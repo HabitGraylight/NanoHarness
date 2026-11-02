@@ -207,6 +207,11 @@ Profiles can enable Parallel with `servers: [{name: parallel, transport: streama
 
 Optional `headers` are passed as configured and redacted from inspection receipts. Credential-like URL query values are also redacted, and HTTP connections never read credentials from the environment. Free access has usage limits; connection and tool failures follow the existing MCP failure policy. `read_timeout_seconds` bounds MCP requests, while engine permissions and cooperative cancellation at step boundaries still apply. Use `extensions.close()` when managing the extension lifecycle without a context manager.
 
+### Local code inspection with Sem
+
+The [Sem example](examples/sem_code/README.md) discovers entities in a local Git
+checkout through the existing stdio extension, without a model API key.
+
 ## Declarative Profiles and inspection
 
 `HarnessSpec` describes a harness in YAML, TOML, or JSON: host requirements, Extensions, and engine service bindings. `HarnessBuilder` validates the Profile without side effects, resolves dependencies, explains providers and conflicts, and builds the declared composition.
