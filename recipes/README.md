@@ -32,6 +32,10 @@ but deliberately omits raw thoughts, tool arguments, observations, and outputs.
 `compare` accepts either two profiles or two traces and reports factual deltas;
 it does not choose a winner.
 
+## Optional integrations
+
+[Local code inspection with Sem](sem_code/README.md) demonstrates stdio MCP discovery and a tool call against an explicitly selected Git checkout. It requires an optional external binary, uses a dedicated local-mode session, and does not add a default server. Integration recipes stay separate from the complete agents in `examples/`.
+
 ## 中文
 
 这些文件用于展示 NanoHarness 应用是可检查、可组合的白箱环境，而不是固定的
@@ -46,3 +50,7 @@ Agent 实现。
 `trace` 可读取 NanoEngine Report、Checkpoint 或 JSONL Event Stream，并且只保留
 计数、状态、耗时和字符长度，不输出原始 Thought、工具参数、Observation 或输出。
 `compare` 可以比较两个 Profile 或两个 Trace，只呈现事实差异，不替用户判定胜负。
+
+### 可选集成
+
+[使用 Sem 检索本地代码](sem_code/README.md)展示通过 stdio MCP 发现工具，并查询显式指定的 Git 仓库。该配方需要可选的外部程序，使用独立的本地模式会话，不添加默认服务器。此类单项集成配方与 `examples/` 中的完整 Agent 分开存放。
