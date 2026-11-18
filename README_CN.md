@@ -190,6 +190,10 @@ Profile 可以使用 `servers: [{name: parallel, transport: streamable_http, url
 
 可选 `headers` 会原样传递并在检查回执中脱敏，URL 查询参数中类似凭据的值也会脱敏，HTTP 连接不会从环境变量读取凭据。免费访问有用量限制；连接与工具错误沿用 MCP 的失败处理策略。`read_timeout_seconds` 限制请求等待时间，Engine 权限与 Step 边界的协作式取消机制保持有效。使用完毕后调用 `extensions.close()`，或使用 ExtensionManager 上下文管理器释放连接。英文说明提供完整调用示例。
 
+### 使用 Sem 检索本地代码
+
+可选的 [Sem 集成配方](recipes/sem_code/README.md)通过现有 stdio MCP Extension，在显式指定的本地 Git 仓库中查找代码实体，无需模型 API Key。它采用 Sem 本地模式和独立进程，不修改默认服务器或依赖。
+
 ## 声明式 Profile 与检查工具
 
 `HarnessSpec` 使用 YAML、TOML 或 JSON 描述 Host Requirement、Extension 和 Engine Service Binding。`HarnessBuilder` 可以无副作用地校验 Profile、解析依赖、解释 Provider 与冲突，并构建声明的组合。
@@ -231,17 +235,17 @@ nanoharness/
   profiles/      # 声明式组合与检查
   testing/       # 确定性 Provider、Scenario、Artifact
 examples/        # 五个完整、可独立运行的 Harness
-recipes/         # Profile 与 Trace 检查夹具
+recipes/         # Profile/Trace 夹具与可选集成配方
 tests/           # Kernel、Extension、Profile 与 Example Contract
 ```
 
 ## 测试
 
-仓库当前包含 **1,046 个通过的测试**：
+仓库当前包含 **1,056 个通过的测试**：
 
 | 测试集 | 数量 |
 |---|---:|
-| Kernel、Extensions、Profiles 与 Contract | 597 |
+| Kernel、Extensions、Profiles、Recipes 与 Contract | 607 |
 | NanoClaudeCode | 151 |
 | NanoCodex | 96 |
 | NanoHermes | 86 |

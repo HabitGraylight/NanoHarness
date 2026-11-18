@@ -209,8 +209,7 @@ Optional `headers` are passed as configured and redacted from inspection receipt
 
 ### Local code inspection with Sem
 
-The [Sem example](examples/sem_code/README.md) discovers entities in a local Git
-checkout through the existing stdio extension, without a model API key.
+The optional [Sem integration recipe](recipes/sem_code/README.md) discovers entities in an explicitly selected local Git checkout through the existing stdio MCP extension, without a model API key. It uses Sem's local mode and a dedicated process; no default servers or dependencies change.
 
 ## Declarative Profiles and inspection
 
@@ -253,17 +252,17 @@ nanoharness/
   profiles/      # Declarative composition and inspection
   testing/       # Deterministic providers, scenarios, artifacts
 examples/        # Five complete, independently runnable harnesses
-recipes/         # Profile and trace inspection fixtures
+recipes/         # Profile/trace fixtures and optional integrations
 tests/           # Kernel, Extension, Profile, and example contracts
 ```
 
 ## Testing
 
-The repository currently contains **1,046 passing tests**:
+The repository currently contains **1,056 passing tests**:
 
 | Suite | Tests |
 |---|---:|
-| Kernel, Extensions, Profiles, and contracts | 597 |
+| Kernel, Extensions, Profiles, recipes, and contracts | 607 |
 | NanoClaudeCode | 151 |
 | NanoCodex | 96 |
 | NanoHermes | 86 |
